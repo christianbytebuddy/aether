@@ -24,7 +24,6 @@ class MyApp extends StatelessWidget {
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
-          // 🕒 Esperando a Firebase
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Scaffold(
               backgroundColor: Color(0xFF0B0F1A),
@@ -37,12 +36,12 @@ class MyApp extends StatelessWidget {
             );
           }
 
-          // ✅ Logueado → entra a la app con navbar
+          // Logueado → entra a la app con navbar
           if (snapshot.hasData) {
             return const _AppWithNav();
           }
 
-          // ❌ No logueado → login
+          // No logueado → login
           return const LoginPage();
         },
       ),
