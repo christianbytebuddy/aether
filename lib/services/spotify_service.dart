@@ -12,18 +12,13 @@ class SpotifyService {
   DateTime? _tokenExpiry;
 
   static const List<String> _curatedAlbumIds = [
-    '5052Ip89wdW8EGdpjEpNeq',
-    '2NCtCObbmJoJnplsR5mLAl',
-    '3RQQmkQEvNCY4prGKE6oc5',
-    '3HgoCO9wWuPcNhz8Ip4C46',
-    '02m1qgJzjEADPa353lcevb',
-    '0EhZEM4RRz0yioTgucDhJq',
-    '4lkJ6i3LDK8HvcU2tPWX9k',
-    '2X6WyzpxY70eUn3lnewB7d',
-    '2V5rhszUpCudPcb01zevOt?',
+    '5052Ip89wdW8EGdpjEpNeq', // formula of love
+    '0EhZEM4RRz0yioTgucDhJq', // how sweet
+    '3RQQmkQEvNCY4prGKE6oc5', // un verano sin ti
+    '2xkZV2Hl1Omi8rk2D7t5lN', // the new abnormal
+    '6OXg149IkmbgW7zfzbwgS2', // the red summer
+    '1vWMw6pu3err6qqZzI3RhH', // ruby
   ];
-
-  // ── Token ─────────────────────────────────────────────────────────────────
 
   Future<void> _ensureToken() async {
     if (_accessToken != null &&
@@ -31,6 +26,10 @@ class SpotifyService {
         DateTime.now().isBefore(_tokenExpiry!)) {
       return;
     }
+
+    _accessToken = null;
+    _tokenExpiry = null;
+
     final credentials = base64Encode(utf8.encode('$_clientId:$_clientSecret'));
 
     final response = await http.post(
@@ -53,8 +52,6 @@ class SpotifyService {
     );
   }
 
-  // ── Álbum completo por ID (con tracklist) ─────────────────────────────────
-
   Future<AlbumModel> getAlbum(String albumId) async {
     await _ensureToken();
 
@@ -72,15 +69,17 @@ class SpotifyService {
     );
   }
 
-  // ── Feed del home ─────────────────────────────────────────────────────────
-
   Future<List<AlbumModel>> getFeed({int limit = 10}) async {
     await _ensureToken();
 
-    final curatedAlbums = await Future.wait(_curatedAlbumIds.map(getAlbum));
+    final curatedAlbums = <AlbumModel>[];
+    for (var i = 0; i < _curatedAlbumIds.length; i += 3) {
+      final batch = _curatedAlbumIds.skip(i).take(3).toList();
+      final results = await Future.wait(batch.map(getAlbum));
+      curatedAlbums.addAll(results);
+    }
 
     final discoveryAlbums = await _getNewReleases(limit: limit);
-
     final allIds = curatedAlbums.map((a) => a.id).toSet();
     final uniqueDiscovery = discoveryAlbums
         .where((a) => !allIds.contains(a.id))
@@ -99,52 +98,20 @@ class SpotifyService {
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     final items = (data['albums']?['items'] as List<dynamic>?) ?? [];
+    if (items.isEmpty) return [];
 
-    try {
-      return await Future.wait(
-        items.map((item) => getAlbum(item['id'] as String)),
-      );
-    } catch (_) {
-      return [];
+    final ids = items.map((i) => i['id'] as String).toList();
+    final albums = <AlbumModel>[];
+    for (var i = 0; i < ids.length; i += 3) {
+      final batch = ids.skip(i).take(3).toList();
+      try {
+        final results = await Future.wait(batch.map(getAlbum));
+        albums.addAll(results);
+      } catch (_) {}
     }
+    return albums;
   }
 
-  // ── Búsqueda optimizada ───────────────────────────────────────────────────
-  //
-  // ANTES: hacía 15 llamadas individuales para obtener el álbum completo.
-  // AHORA: usa los datos que ya devuelve /search (portada, nombre, artista,
-  //        año) y construye un AlbumModel liviano SIN tracklist.
-  //        El tracklist completo solo se carga al abrir el detail sheet.
-
-  Future<List<AlbumModel>> searchAlbums(String query) async {
-    await _ensureToken();
-
-    final uri = Uri.parse(
-      '$_apiUrl/search'
-      '?q=${Uri.encodeComponent(query)}'
-      '&type=album'
-      '&limit=20',
-    );
-
-    final response = await http.get(
-      uri,
-      headers: {'Authorization': 'Bearer $_accessToken'},
-    );
-
-    if (response.statusCode != 200) return [];
-
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final items = (data['albums']?['items'] as List<dynamic>?) ?? [];
-
-    // Construye modelos livianos directamente desde la respuesta de /search
-    // → 1 sola llamada HTTP en lugar de 20
-    return items
-        .map((item) => _albumFromSearchItem(item as Map<String, dynamic>))
-        .toList();
-  }
-
-  /// Construye un AlbumModel liviano desde el item de /search.
-  /// No tiene tracklist — se carga bajo demanda al abrir el detalle.
   AlbumModel _albumFromSearchItem(Map<String, dynamic> item) {
     final images = (item['images'] as List<dynamic>?) ?? [];
     final imageUrl = images.isNotEmpty
@@ -165,9 +132,166 @@ class SpotifyService {
       imageUrl: imageUrl,
       year: year,
       totalTracks: item['total_tracks'] as int? ?? 0,
-      durationMs: 0, // No disponible en /search — se carga al abrir detalle
-      genres: [], // No disponible en /search
-      tracks: [], // Se carga bajo demanda
+      durationMs: 0,
+      genres: [],
+      tracks: [],
     );
   }
+
+  Future<List<AlbumModel>> searchAlbums(String query) async {
+    await _ensureToken();
+
+    final uri = Uri.parse(
+      '$_apiUrl/search'
+      '?q=${Uri.encodeComponent(query)}'
+      '&type=album'
+      '&limit=10',
+    );
+
+    final response = await http.get(
+      uri,
+      headers: {'Authorization': 'Bearer $_accessToken'},
+    );
+
+    if (response.statusCode != 200) return [];
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = (data['albums']?['items'] as List<dynamic>?) ?? [];
+
+    return items
+        .map((item) => _albumFromSearchItem(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<String> getDeezerTrackPreview(String trackId) async {
+    final res = await http.get(
+      Uri.parse('https://api.deezer.com/track/$trackId'),
+    );
+    if (res.statusCode != 200) return '';
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    return data['preview'] as String? ?? '';
+  }
+
+  // ── ECHO ──────────────────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> searchArtists(String query) async {
+    await _ensureToken();
+
+    final uri = Uri.parse(
+      '$_apiUrl/search'
+      '?q=${Uri.encodeComponent(query)}'
+      '&type=artist'
+      '&limit=8',
+    );
+
+    final response = await http.get(
+      uri,
+      headers: {'Authorization': 'Bearer $_accessToken'},
+    );
+
+    if (response.statusCode != 200) return [];
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = (data['artists']?['items'] as List<dynamic>?) ?? [];
+
+    return items.map((item) {
+      final images = (item['images'] as List<dynamic>?) ?? [];
+      return {
+        'id': item['id'] as String? ?? '',
+        'name': item['name'] as String? ?? '',
+        'imageUrl': images.isNotEmpty
+            ? (images[0]['url'] as String? ?? '')
+            : '',
+      };
+    }).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getArtistTopTracks(
+    String artistName, {
+    String? deezerArtistId,
+  }) async {
+    String resolvedId;
+    String artistImageUrl = '';
+
+    if (deezerArtistId != null && deezerArtistId.isNotEmpty) {
+      resolvedId = deezerArtistId;
+
+      final artistRes = await http.get(
+        Uri.parse('https://api.deezer.com/artist/$resolvedId'),
+      );
+      if (artistRes.statusCode == 200) {
+        final artistData = jsonDecode(artistRes.body) as Map<String, dynamic>;
+        artistImageUrl =
+            artistData['picture_xl'] as String? ??
+            artistData['picture_big'] as String? ??
+            artistData['picture'] as String? ??
+            '';
+      }
+    } else {
+      final searchRes = await http.get(
+        Uri.parse(
+          'https://api.deezer.com/search/artist?q=${Uri.encodeComponent(artistName)}&limit=10',
+        ),
+      );
+      if (searchRes.statusCode != 200) return [];
+
+      final searchData = jsonDecode(searchRes.body) as Map<String, dynamic>;
+      final artists = (searchData['data'] as List<dynamic>?) ?? [];
+      if (artists.isEmpty) return [];
+
+      final exactMatches = artists
+          .where(
+            (a) =>
+                (a['name'] as String).toLowerCase() == artistName.toLowerCase(),
+          )
+          .toList();
+
+      final candidates = exactMatches.isNotEmpty ? exactMatches : artists;
+      final match = candidates.reduce((a, b) {
+        final fansA = (a['nb_fan'] as int?) ?? 0;
+        final fansB = (b['nb_fan'] as int?) ?? 0;
+        return fansA >= fansB ? a : b;
+      });
+
+      resolvedId = match['id'].toString();
+      artistImageUrl =
+          match['picture_xl'] as String? ??
+          match['picture_big'] as String? ??
+          match['picture'] as String? ??
+          '';
+    }
+
+    final tracksRes = await http.get(
+      Uri.parse('https://api.deezer.com/artist/$resolvedId/top?limit=30'),
+    );
+    if (tracksRes.statusCode != 200) return [];
+
+    final tracksData = jsonDecode(tracksRes.body) as Map<String, dynamic>;
+    final tracks = (tracksData['data'] as List<dynamic>?) ?? [];
+
+    return tracks
+        .map((t) {
+          final album = t['album'] as Map<String, dynamic>? ?? {};
+          final imageUrl =
+              album['cover_xl'] as String? ??
+              album['cover_big'] as String? ??
+              album['cover_medium'] as String? ??
+              album['cover'] as String? ??
+              artistImageUrl;
+
+          final previewUrl = t['preview'] as String? ?? '';
+
+          return {
+            'id': t['id'].toString(),
+            'name': t['title'] as String? ?? '',
+            'deezerTrackId': t['id'].toString(),
+            'previewUrl': previewUrl,
+            'imageUrl': imageUrl,
+          };
+        })
+        .where((t) => (t['previewUrl'] as String).isNotEmpty)
+        .toList();
+  }
+
+  Future<AlbumModel> getAlbumById(String albumId) => getAlbum(albumId);
 }

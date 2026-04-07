@@ -1,14 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:app_links/app_links.dart';
 import 'core/firebase_options.dart';
 import 'features/auth/login_page.dart';
 import 'features/home/home_page.dart';
+import 'features/aethra/aethra_page.dart';
+import 'features/community/community_page.dart';
+import 'package:aether/features/echo/echo_page.dart';
 import 'profile_page.dart';
+import 'package:aether/services/spotify_auth_service.dart';
+import 'package:aether/features/pulse/pulse_page.dart';
+import 'package:aether/core/user_session.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Escucha deep links para el callback de Spotify
+  final appLinks = AppLinks();
+  appLinks.uriLinkStream.listen((uri) {
+    debugPrint('DEEP LINK: $uri');
+    if (uri.scheme == 'aether' && uri.host == 'spotify-callback') {
+      SpotifyAuthService.onCallback?.call(uri.toString());
+    }
+  });
+
   runApp(const MyApp());
 }
 
@@ -35,13 +52,7 @@ class MyApp extends StatelessWidget {
               ),
             );
           }
-
-          // Logueado → entra a la app con navbar
-          if (snapshot.hasData) {
-            return const _AppWithNav();
-          }
-
-          // No logueado → login
+          if (snapshot.hasData) return const _AppWithNav();
           return const LoginPage();
         },
       ),
@@ -49,7 +60,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Navbar con HomePage real en index 0
 class _AppWithNav extends StatefulWidget {
   const _AppWithNav();
 
@@ -60,13 +70,19 @@ class _AppWithNav extends StatefulWidget {
 class _AppWithNavState extends State<_AppWithNav> {
   int _currentIndex = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    UserSession.instance.load();
+  }
+
   final List<Widget> _pages = [
-    const HomePage(), // 0 — Home
-    const _Placeholder(label: 'Aethra'), // 1
-    const _Placeholder(label: 'Comunidad'), // 2
-    const _Placeholder(label: 'Pulse'), // 3
-    const _Placeholder(label: 'Echo'), // 4
-    const ProfilePage(), // 5 — Perfil
+    const HomePage(),
+    const AethraPage(),
+    const CommunityPage(),
+    const PulsePage(),
+    const EchoPage(),
+    const ProfilePage(),
   ];
 
   static const _items = [
@@ -84,7 +100,7 @@ class _AppWithNavState extends State<_AppWithNav> {
     _NavItem(
       icon: Icons.graphic_eq_outlined,
       activeIcon: Icons.graphic_eq,
-      label: 'Pulse',
+      label: 'Tracker',
     ),
     _NavItem(icon: Icons.bolt_outlined, activeIcon: Icons.bolt, label: 'Echo'),
     _NavItem(

@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:aether/models/album_model.dart';
 import 'package:aether/services/firestore_service.dart';
 import 'package:aether/services/spotify_service.dart';
 import 'package:aether/features/home/album_detail_sheet.dart';
 
-/// Vista de detalle de una carpeta.
-/// Modo normal: muestra álbumes guardados.
-/// Modo búsqueda: busca en Spotify y permite guardar directo en la carpeta.
 class FolderDetailPage extends StatefulWidget {
   final String folderId;
   final String folderName;
@@ -26,14 +24,12 @@ class _FolderDetailPageState extends State<FolderDetailPage> {
   final _spotify = SpotifyService();
   final _searchController = TextEditingController();
 
-  // ── Estado ────────────────────────────────────────────────────────────────
-  bool _searchMode = false; // true = modo búsqueda Spotify activo
-  bool _isSearching = false; // true = esperando respuesta de Spotify
+  bool _searchMode = false;
+  bool _isSearching = false;
   List<AlbumModel> _searchResults = [];
-  Set<String> _savedAlbumIds = {}; // IDs ya guardados en esta carpeta
+  Set<String> _savedAlbumIds = {};
 
   static const _bgColor = Color(0xFF0B0F1A);
-
   static const _accentColor = Color(0xFF7B6EF6);
 
   @override
@@ -42,7 +38,6 @@ class _FolderDetailPageState extends State<FolderDetailPage> {
     super.dispose();
   }
 
-  // ── Toggle modo búsqueda ──────────────────────────────────────────────────
   void _toggleSearch() {
     setState(() {
       _searchMode = !_searchMode;
@@ -54,15 +49,12 @@ class _FolderDetailPageState extends State<FolderDetailPage> {
     });
   }
 
-  // ── Búsqueda en Spotify ───────────────────────────────────────────────────
   Future<void> _search(String query) async {
     if (query.trim().isEmpty) {
       setState(() => _searchResults = []);
       return;
     }
-
     setState(() => _isSearching = true);
-
     try {
       final results = await _spotify.searchAlbums(query.trim());
       if (mounted) setState(() => _searchResults = results);
@@ -81,11 +73,10 @@ class _FolderDetailPageState extends State<FolderDetailPage> {
     }
   }
 
-  // ── Guardar álbum en carpeta ──────────────────────────────────────────────
   Future<void> _saveAlbum(AlbumModel album) async {
     await _firestore.saveAlbumToFolder(widget.folderId, album);
-    setState(() => _savedAlbumIds.add(album.id));
     if (mounted) {
+      setState(() => _savedAlbumIds.add(album.id));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('"${album.name}" guardado en ${widget.folderName}'),
@@ -121,9 +112,9 @@ class _FolderDetailPageState extends State<FolderDetailPage> {
                   style: const TextStyle(color: Colors.white, fontSize: 15),
                   cursorColor: _accentColor,
                   onChanged: _search,
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     hintText: 'Buscar álbum en Spotify...',
-                    hintStyle: const TextStyle(color: Colors.white38),
+                    hintStyle: TextStyle(color: Colors.white38),
                     border: InputBorder.none,
                   ),
                 )
@@ -155,20 +146,16 @@ class _FolderDetailPageState extends State<FolderDetailPage> {
           ),
         ],
       ),
-
-      // ── Body ───────────────────────────────────────────────────────────────
       body: _searchMode ? _buildSearchBody() : _buildFolderBody(),
     );
   }
 
-  // ── Modo búsqueda ─────────────────────────────────────────────────────────
   Widget _buildSearchBody() {
     if (_isSearching) {
       return const Center(
         child: CircularProgressIndicator(color: _accentColor, strokeWidth: 2),
       );
     }
-
     if (_searchController.text.isEmpty) {
       return const Center(
         child: Column(
@@ -184,7 +171,6 @@ class _FolderDetailPageState extends State<FolderDetailPage> {
         ),
       );
     }
-
     if (_searchResults.isEmpty) {
       return Center(
         child: Text(
@@ -193,14 +179,12 @@ class _FolderDetailPageState extends State<FolderDetailPage> {
         ),
       );
     }
-
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
       itemCount: _searchResults.length,
       itemBuilder: (_, i) {
         final album = _searchResults[i];
         final alreadySaved = _savedAlbumIds.contains(album.id);
-
         return _SearchResultRow(
           album: album,
           alreadySaved: alreadySaved,
@@ -210,7 +194,6 @@ class _FolderDetailPageState extends State<FolderDetailPage> {
     );
   }
 
-  // ── Modo normal (álbumes guardados) ───────────────────────────────────────
   Widget _buildFolderBody() {
     return StreamBuilder<List<AlbumModel>>(
       stream: _firestore.folderAlbumsStream(widget.folderId),
@@ -226,8 +209,12 @@ class _FolderDetailPageState extends State<FolderDetailPage> {
 
         final albums = snapshot.data ?? [];
 
-        // Sincroniza los IDs guardados para el modo búsqueda
-        _savedAlbumIds = albums.map((a) => a.id).toSet();
+        // Actualiza fuera del build para evitar rebuilds en cascada
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _savedAlbumIds = albums.map((a) => a.id).toSet();
+          }
+        });
 
         if (albums.isEmpty) {
           return const Center(
@@ -264,8 +251,6 @@ class _FolderDetailPageState extends State<FolderDetailPage> {
   }
 }
 
-// ── Fila de resultado de Spotify ──────────────────────────────────────────────
-
 class _SearchResultRow extends StatelessWidget {
   final AlbumModel album;
   final bool alreadySaved;
@@ -288,17 +273,21 @@ class _SearchResultRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Portada
             ClipRRect(
               borderRadius: const BorderRadius.horizontal(
                 left: Radius.circular(14),
               ),
-              child: Image.network(
-                album.imageUrl,
+              child: CachedNetworkImage(
+                imageUrl: album.imageUrl,
                 width: 70,
                 height: 70,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
+                placeholder: (_, __) => const SizedBox(
+                  width: 70,
+                  height: 70,
+                  child: ColoredBox(color: Color(0xFF1A1F35)),
+                ),
+                errorWidget: (_, __, ___) => Container(
                   width: 70,
                   height: 70,
                   color: const Color(0xFF1A1F35),
@@ -311,7 +300,6 @@ class _SearchResultRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 14),
-            // Info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -341,7 +329,6 @@ class _SearchResultRow extends StatelessWidget {
                 ],
               ),
             ),
-            // Botón guardar o badge "ya guardado"
             Padding(
               padding: const EdgeInsets.only(right: 12),
               child: alreadySaved
@@ -369,8 +356,6 @@ class _SearchResultRow extends StatelessWidget {
     );
   }
 }
-
-// ── Fila de álbum guardado (sin cambios) ──────────────────────────────────────
 
 class _AlbumRow extends StatelessWidget {
   final AlbumModel album;
@@ -450,12 +435,17 @@ class _AlbumRow extends StatelessWidget {
                 borderRadius: const BorderRadius.horizontal(
                   left: Radius.circular(14),
                 ),
-                child: Image.network(
-                  album.imageUrl,
+                child: CachedNetworkImage(
+                  imageUrl: album.imageUrl,
                   width: 70,
                   height: 70,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
+                  placeholder: (_, __) => const SizedBox(
+                    width: 70,
+                    height: 70,
+                    child: ColoredBox(color: Color(0xFF1A1F35)),
+                  ),
+                  errorWidget: (_, __, ___) => Container(
                     width: 70,
                     height: 70,
                     color: const Color(0xFF1A1F35),

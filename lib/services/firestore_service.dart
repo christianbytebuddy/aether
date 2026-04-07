@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:aether/models/album_model.dart';
+import 'package:aether/core/user_session.dart';
 
 /// Maneja el CRUD de likes y carpetas en Firestore.
 ///
@@ -49,6 +50,29 @@ class FirestoreService {
               .map((d) => _albumFromMap(d.data() as Map<String, dynamic>))
               .toList(),
         );
+  }
+
+  // ── RATINGS ───────────────────────────────────────────────────────────────
+
+  CollectionReference get _ratings =>
+      _db.collection('users').doc(_uid).collection('ratings');
+
+  Future<void> saveRating(String albumId, double rating) async {
+    await _ratings.doc(albumId).set({
+      'albumId': albumId,
+      'rating': rating,
+      'ratedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> deleteRating(String albumId) async {
+    await _ratings.doc(albumId).delete();
+  }
+
+  Future<double> getRating(String albumId) async {
+    final doc = await _ratings.doc(albumId).get();
+    if (!doc.exists) return 0.0;
+    return (doc.data() as Map<String, dynamic>)['rating'] as double? ?? 0.0;
   }
 
   // ── CARPETAS ──────────────────────────────────────────────────────────────
@@ -115,21 +139,139 @@ class FirestoreService {
 
   /// Carga si un álbum está likeado y en qué carpetas está guardado
   Future<Map<String, dynamic>> getAlbumState(String albumId) async {
-    final liked = await isAlbumLiked(albumId);
-
     final foldersSnap = await _folders.get();
-    final savedInFolders = <String>[];
 
-    for (final folder in foldersSnap.docs) {
-      final albumDoc = await _folders
-          .doc(folder.id)
-          .collection('albums')
-          .doc(albumId)
-          .get();
-      if (albumDoc.exists) savedInFolders.add(folder.id);
+    // Todas las lecturas en paralelo — una sola espera
+    final results = await Future.wait([
+      isAlbumLiked(albumId),
+      ...foldersSnap.docs.map(
+        (folder) => _folders
+            .doc(folder.id)
+            .collection('albums')
+            .doc(albumId)
+            .get()
+            .then((doc) => doc.exists ? folder.id : null),
+      ),
+    ]);
+
+    final isLiked = results.first as bool;
+    final savedInFolders = results.skip(1).whereType<String>().toList();
+
+    return {'isLiked': isLiked, 'savedInFolders': savedInFolders};
+  }
+
+  // ── COMUNIDAD ─────────────────────────────────────────────────────────────
+
+  final CollectionReference _posts = FirebaseFirestore.instance.collection(
+    'community_posts',
+  );
+
+  Future<void> createPost({
+    required String title,
+    required String description,
+    required List<AlbumModel> albums,
+  }) async {
+    final user = _auth.currentUser!;
+    await _posts.add({
+      'uid': user.uid,
+      'username': user.displayName ?? 'Usuario',
+      'avatarLetter': (user.displayName ?? 'U')[0].toUpperCase(),
+      'photoBase64': UserSession.instance.photoBase64, // ← nuevo
+      'title': title,
+      'description': description,
+      'likes': 0,
+      'likedBy': [],
+      'albums': albums
+          .map(
+            (a) => {
+              'id': a.id,
+              'name': a.name,
+              'artist': a.artist,
+              'imageUrl': a.imageUrl,
+            },
+          )
+          .toList(),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> togglePostLike(String postId, bool isCurrentlyLiked) async {
+    final ref = _posts.doc(postId);
+    if (isCurrentlyLiked) {
+      await ref.set({
+        'likedBy': FieldValue.arrayRemove([_uid]),
+        'likes': FieldValue.increment(-1),
+      }, SetOptions(merge: true));
+    } else {
+      await ref.set({
+        'likedBy': FieldValue.arrayUnion([_uid]),
+        'likes': FieldValue.increment(1),
+      }, SetOptions(merge: true));
     }
+  }
 
-    return {'isLiked': liked, 'savedInFolders': savedInFolders};
+  Future<void> addComment({
+    required String postId,
+    required String text,
+  }) async {
+    final user = _auth.currentUser!;
+    await _posts.doc(postId).collection('comments').add({
+      'uid': user.uid,
+      'username': user.displayName ?? 'Usuario',
+      'avatarLetter': (user.displayName ?? 'U')[0].toUpperCase(),
+      'photoBase64': UserSession.instance.photoBase64, // ← nuevo
+      'text': text,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Stream<List<Map<String, dynamic>>> commentsStream(String postId) {
+    return _posts
+        .doc(postId)
+        .collection('comments')
+        .orderBy('createdAt', descending: false)
+        .snapshots()
+        .map(
+          (snap) => snap.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
+        );
+  }
+
+  Future<void> updatePost({
+    required String postId,
+    required String title,
+    required String description,
+  }) async {
+    await _posts.doc(postId).update({
+      'title': title,
+      'description': description,
+    });
+  }
+
+  Future<void> deletePost(String postId) async {
+    // Borra comentarios primero
+    final comments = await _posts.doc(postId).collection('comments').get();
+    for (final doc in comments.docs) {
+      await doc.reference.delete();
+    }
+    await _posts.doc(postId).delete();
+  }
+
+  Future<void> deleteComment({
+    required String postId,
+    required String commentId,
+  }) async {
+    await _posts.doc(postId).collection('comments').doc(commentId).delete();
+  }
+
+  Future<Map<String, dynamic>?> getUserDoc(String uid) async {
+    final doc = await _db.collection('users').doc(uid).get();
+    return doc.data();
+  }
+
+  Future<void> saveUserPhoto(String uid, String base64Str) async {
+    await _db.collection('users').doc(uid).set({
+      'photoBase64': base64Str,
+    }, SetOptions(merge: true));
   }
 
   // ── Helpers privados ──────────────────────────────────────────────────────
@@ -158,4 +300,23 @@ class FirestoreService {
     genres: List<String>.from(map['genres'] as List? ?? []),
     tracks: [], // No guardamos tracklist en Firestore para ahorrar espacio
   );
+
+  Stream<Map<String, dynamic>> postStream(String postId) {
+    return _posts
+        .doc(postId)
+        .snapshots()
+        .map((doc) => {'id': doc.id, ...doc.data() as Map<String, dynamic>});
+  }
+
+  Stream<List<Map<String, dynamic>>> communityPostsStream() {
+    return _posts
+        .orderBy('createdAt', descending: true)
+        .limit(30)
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
+              .toList(),
+        );
+  }
 }
