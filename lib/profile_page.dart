@@ -1,20 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:aether/services/firestore_service.dart';
 import 'package:aether/services/auth_service.dart';
+import 'package:aether/services/spotify_auth_service.dart';
 import 'package:aether/models/album_model.dart';
 import 'package:aether/features/home/folder_detail_page.dart';
-
-// ════════════════════════════════════════════════════════════════
-//  NAVBAR PRINCIPAL — reemplaza tu Scaffold raíz en main.dart
-//
-//  USO en main.dart:
-//  Donde antes tenías HomePage() o tu pantalla inicial,
-//  pon MainNavigation() como home del MaterialApp.
-//  Ejemplo:
-//    home: MainNavigation(),
-// ════════════════════════════════════════════════════════════════
+import 'dart:convert';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -26,10 +20,8 @@ class MainNavigation extends StatefulWidget {
 class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
 
-  // Reemplaza los _PlaceholderPage con tus páginas reales cuando las tengas.
-  // HomePage ya la tienes — impórtala y úsala en index 0.
   late final List<Widget> _pages = [
-    const _PlaceholderPage(label: 'Home'), // → reemplaza con HomePage()
+    const _PlaceholderPage(label: 'Home'),
     const _PlaceholderPage(label: 'Aethra'),
     const _PlaceholderPage(label: 'Comunidad'),
     const _PlaceholderPage(label: 'Pulse'),
@@ -49,8 +41,6 @@ class _MainNavigationState extends State<MainNavigation> {
     );
   }
 }
-
-// ── Navbar ─────────────────────────────────────────────────────────────────────
 
 class _AetherNavBar extends StatelessWidget {
   final int currentIndex;
@@ -153,8 +143,6 @@ class _NavItem {
   });
 }
 
-// ── Placeholder para páginas futuras ──────────────────────────────────────────
-
 class _PlaceholderPage extends StatelessWidget {
   final String label;
   const _PlaceholderPage({required this.label});
@@ -188,20 +176,25 @@ class _ProfilePageState extends State<ProfilePage> {
   final _firestore = FirestoreService();
   final _auth = AuthService();
 
-  // Carpetas
   List<Map<String, dynamic>> _folders = [];
   StreamSubscription? _foldersSubscription;
 
-  // Liked albums
   List<AlbumModel> _likedAlbums = [];
   StreamSubscription? _likedSubscription;
 
-  // Input nueva carpeta
   bool _showFolderInput = false;
   final _folderNameController = TextEditingController();
   bool _creatingFolder = false;
 
-  // Colores
+  final _spotifyAuth = SpotifyAuthService();
+  bool _spotifyConnected = false;
+  List<Map<String, dynamic>> _topArtists = [];
+  List<Map<String, dynamic>> _topTracks = [];
+  bool _loadingStats = false;
+
+  String? _photoUrl;
+  bool _uploadingPhoto = false;
+
   static const _bg = Color(0xFF0B0F1A);
   static const _card = Color(0xFF111827);
   static const _accent = Color(0xFF7B6EF6);
@@ -212,6 +205,8 @@ class _ProfilePageState extends State<ProfilePage> {
     super.initState();
     _listenFolders();
     _listenLikedAlbums();
+    _checkSpotifyConnection();
+    _loadPhoto();
   }
 
   void _listenFolders() {
@@ -234,7 +229,45 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
-  // ── Acciones de carpeta ───────────────────────────────────────────────────
+  Future<void> _loadPhoto() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final doc = await FirestoreService().getUserDoc(uid);
+      final url = doc?['photoBase64'] as String?;
+      if (url != null && mounted) {
+        setState(() => _photoUrl = url);
+      }
+    } catch (e) {
+      debugPrint('ERROR cargando foto: $e');
+    }
+  }
+
+  Future<void> _pickAndUploadPhoto() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 256,
+      maxHeight: 256,
+      imageQuality: 70,
+    );
+    if (picked == null) return;
+
+    if (mounted) setState(() => _uploadingPhoto = true);
+    try {
+      final bytes = await picked.readAsBytes();
+      final base64Str = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+
+      final uid = FirebaseAuth.instance.currentUser!.uid;
+      await FirestoreService().saveUserPhoto(uid, base64Str);
+
+      if (mounted) setState(() => _photoUrl = base64Str);
+    } catch (e) {
+      debugPrint('ERROR FOTO: $e');
+    } finally {
+      if (mounted) setState(() => _uploadingPhoto = false);
+    }
+  }
 
   Future<void> _createFolder() async {
     final name = _folderNameController.text.trim();
@@ -331,8 +364,67 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  Future<void> _checkSpotifyConnection() async {
+    final connected = await _spotifyAuth.isConnected();
+    if (mounted) setState(() => _spotifyConnected = connected);
+    if (connected) _loadStats();
+  }
+
+  Future<void> _connectSpotify() async {
+    final success = await _spotifyAuth.connectSpotify();
+    if (success && mounted) {
+      setState(() => _spotifyConnected = true);
+      _loadStats();
+    }
+  }
+
+  Future<void> _loadStats() async {
+    if (!mounted) return;
+    setState(() => _loadingStats = true);
+    try {
+      final artists = await _spotifyAuth.getTopArtists();
+      final tracks = await _spotifyAuth.getTopTracks();
+      if (mounted)
+        setState(() {
+          _topArtists = artists;
+          _topTracks = tracks;
+          _loadingStats = false;
+        });
+    } catch (_) {
+      if (mounted) setState(() => _loadingStats = false);
+    }
+  }
+
   Future<void> _signOut() async {
     await _auth.signOut();
+  }
+
+  String _topSong() {
+    if (_topTracks.isEmpty) return '-';
+    return _topTracks.first['name'] as String;
+  }
+
+  String _topAlbum() {
+    if (_topTracks.isEmpty) return '-';
+    final freq = <String, int>{};
+    for (final t in _topTracks) {
+      final album = t['albumName'] as String? ?? '';
+      if (album.isNotEmpty) freq[album] = (freq[album] ?? 0) + 1;
+    }
+    if (freq.isEmpty) return '-';
+    return freq.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+  }
+
+  String _topGenre() {
+    final genres = <String>[];
+    for (final artist in _topArtists) {
+      genres.addAll(List<String>.from(artist['genres'] as List? ?? []));
+    }
+    if (genres.isEmpty) return 'K-pop';
+    final freq = <String, int>{};
+    for (final g in genres) freq[g] = (freq[g] ?? 0) + 1;
+    final top = freq.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+    return top[0].toUpperCase() + top.substring(1);
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -362,6 +454,8 @@ class _ProfilePageState extends State<ProfilePage> {
                     _buildLibrarySection(),
                     const SizedBox(height: 28),
                     _buildLikedAlbumsSection(),
+                    const SizedBox(height: 28),
+                    _buildStatsSection(),
                     const SizedBox(height: 40),
                   ],
                 ),
@@ -416,34 +510,85 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
       child: Column(
         children: [
-          // Avatar + datos
           Row(
             children: [
-              // Avatar
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF7B6EF6), Color(0xFF4A3FC4)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: Center(
-                  child: Text(
-                    username.isNotEmpty ? username[0].toUpperCase() : 'A',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w700,
+              GestureDetector(
+                onTap: _uploadingPhoto ? null : _pickAndUploadPhoto,
+                child: Stack(
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF7B6EF6), Color(0xFF4A3FC4)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      child: _uploadingPhoto
+                          ? const Center(
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            )
+                          : _photoUrl != null
+                          ? ClipOval(
+                              child: _photoUrl!.startsWith('data:')
+                                  ? Image.memory(
+                                      base64Decode(_photoUrl!.split(',')[1]),
+                                      width: 64,
+                                      height: 64,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : CachedNetworkImage(
+                                      imageUrl: _photoUrl!,
+                                      width: 64,
+                                      height: 64,
+                                      fit: BoxFit.cover,
+                                    ),
+                            )
+                          : Center(
+                              child: Text(
+                                username.isNotEmpty
+                                    ? username[0].toUpperCase()
+                                    : 'A',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
                     ),
-                  ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          color: _accent,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: _card, width: 2),
+                        ),
+                        child: const Icon(
+                          Icons.camera_alt,
+                          color: Colors.white,
+                          size: 10,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: 16),
-              // Nombre y subtítulo
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -457,9 +602,14 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    const Text(
-                      '',
-                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                    Text(
+                      email,
+                      style: const TextStyle(
+                        color: Colors.white38,
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -469,7 +619,6 @@ class _ProfilePageState extends State<ProfilePage> {
           const SizedBox(height: 20),
           const Divider(color: Color(0xFF1E2236), height: 1),
           const SizedBox(height: 20),
-          // Seguidores / Siguiendo — por ahora en 0, se implementa después
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -513,7 +662,6 @@ class _ProfilePageState extends State<ProfilePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Encabezado "Mi Biblioteca" + botón +
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -554,8 +702,6 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ),
         const SizedBox(height: 12),
-
-        // Input nueva carpeta (aparece/desaparece)
         AnimatedCrossFade(
           firstChild: const SizedBox.shrink(),
           secondChild: _buildFolderInput(),
@@ -564,8 +710,6 @@ class _ProfilePageState extends State<ProfilePage> {
               : CrossFadeState.showFirst,
           duration: const Duration(milliseconds: 200),
         ),
-
-        // Lista de carpetas
         if (_folders.isEmpty && !_showFolderInput)
           _buildEmptyFolders()
         else
@@ -818,10 +962,11 @@ class _ProfilePageState extends State<ProfilePage> {
               final album = _likedAlbums[i];
               return ClipRRect(
                 borderRadius: BorderRadius.circular(10),
-                child: Image.network(
-                  album.imageUrl,
+                child: CachedNetworkImage(
+                  imageUrl: album.imageUrl,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
+                  placeholder: (_, __) => Container(color: _surface),
+                  errorWidget: (_, __, ___) => Container(
                     color: _surface,
                     child: const Icon(Icons.album, color: Colors.white12),
                   ),
@@ -830,6 +975,218 @@ class _ProfilePageState extends State<ProfilePage> {
             },
           ),
       ],
+    );
+  }
+
+  // ── Estadísticas ──────────────────────────────────────────────────────────
+
+  Widget _buildStatsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Estadísticas del mes',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (_spotifyConnected)
+              GestureDetector(
+                onTap: () async {
+                  await _spotifyAuth.disconnect();
+                  setState(() {
+                    _spotifyConnected = false;
+                    _topArtists = [];
+                    _topTracks = [];
+                  });
+                },
+                child: const Text(
+                  'Desconectar',
+                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (!_spotifyConnected)
+          GestureDetector(
+            onTap: _connectSpotify,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF111827),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF1DB954), width: 0.5),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.music_note, color: Color(0xFF1DB954), size: 20),
+                  SizedBox(width: 10),
+                  Text(
+                    'Conectar Spotify',
+                    style: TextStyle(
+                      color: Color(0xFF1DB954),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else if (_loadingStats)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: CircularProgressIndicator(
+                color: Color(0xFF1DB954),
+                strokeWidth: 2,
+              ),
+            ),
+          )
+        else ...[
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatCard(
+                  icon: Icons.music_note_outlined,
+                  iconColor: const Color(0xFF7B6EF6),
+                  value: _topSong(),
+                  label: 'TOP CANCIÓN',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildStatCard(
+                  icon: Icons.album_outlined,
+                  iconColor: Colors.redAccent,
+                  value: _topAlbum(),
+                  label: 'TOP ÁLBUM',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatCard(
+                  icon: Icons.mic_none_outlined,
+                  iconColor: Colors.pinkAccent,
+                  value: _topArtists.isNotEmpty
+                      ? _topArtists.first['name'] as String
+                      : '-',
+                  label: 'TOP ARTISTA',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildStatCard(
+                  icon: Icons.favorite_border,
+                  iconColor: Colors.white54,
+                  value: _topGenre(),
+                  label: 'GÉNERO FAV.',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (_topArtists.isNotEmpty) ...[
+            const Text(
+              'Top artistas',
+              style: TextStyle(
+                color: Colors.white54,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+              ),
+            ),
+            const SizedBox(height: 10),
+            ..._topArtists
+                .take(3)
+                .map(
+                  (a) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: a['imageUrl'] != ''
+                              ? CachedNetworkImage(
+                                  imageUrl: a['imageUrl'] as String,
+                                  width: 44,
+                                  height: 44,
+                                  fit: BoxFit.cover,
+                                )
+                              : Container(
+                                  width: 44,
+                                  height: 44,
+                                  color: const Color(0xFF1C1F2E),
+                                ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          a['name'] as String,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+          ],
+        ],
+      ],
+    );
+  }
+
+  Widget _buildStatCard({
+    required IconData icon,
+    required Color iconColor,
+    required String value,
+    required String label,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111827),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: iconColor, size: 22),
+          const SizedBox(height: 10),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white38,
+              fontSize: 10,
+              letterSpacing: 0.8,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -27,7 +27,10 @@ migrate_working_dir/
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
+*g.dart
 .flutter-plugins-dependencies
+.flutter-plugins
+.packages
 .pub-cache/
 .pub/
 /build/
@@ -46,3 +49,22 @@ app.*.map.json
 
 # sestitive files
 backend/serviceAccountKey.json
+
+# Android
+android/local.properties
+android/key.propierties
+android/.gradle/
+
+$ iOS
+ios/Pods/
+ios/.symlinks/
+
+# Firebase - SENSIBLE
+google-services.json
+GoogleService-Info.plist
+lib/core/firebase_options.dart
+
+# Credenciales - SENSIBLE
+.env
+*.env
+secrets.dart

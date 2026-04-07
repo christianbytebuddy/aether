@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:aether/models/album_model.dart';
 import 'package:aether/services/firestore_service.dart';
 
-/// Bottom sheet con el detalle completo del álbum.
-/// Se abre al tocar la portada o el botón de info.
 class AlbumDetailSheet extends StatefulWidget {
   final AlbumModel album;
   final FirestoreService firestoreService;
@@ -23,11 +22,19 @@ class AlbumDetailSheet extends StatefulWidget {
 class _AlbumDetailSheetState extends State<AlbumDetailSheet> {
   bool _isLiked = false;
   bool _isProcessing = false;
+  double _rating = 0.0;
 
   @override
   void initState() {
     super.initState();
     _isLiked = widget.album.isLiked;
+    _rating = widget.album.rating;
+    _loadRating();
+  }
+
+  Future<void> _loadRating() async {
+    final rating = await widget.firestoreService.getRating(widget.album.id);
+    if (mounted) setState(() => _rating = rating);
   }
 
   Future<void> _toggleLike() async {
@@ -50,9 +57,21 @@ class _AlbumDetailSheetState extends State<AlbumDetailSheet> {
     }
   }
 
+  Future<void> _setRating(double rating) async {
+    final newRating = _rating == rating ? 0.0 : rating;
+    setState(() => _rating = newRating);
+    widget.album.rating = newRating;
+    if (newRating == 0.0) {
+      await widget.firestoreService.deleteRating(widget.album.id);
+    } else {
+      await widget.firestoreService.saveRating(widget.album.id, newRating);
+    }
+  }
+
   void _showSaveFolderDialog() {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: const Color(0xFF1C1F2E),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -67,15 +86,17 @@ class _AlbumDetailSheetState extends State<AlbumDetailSheet> {
   @override
   Widget build(BuildContext context) {
     final album = widget.album;
-    final bgColor = widget.bgColor;
+
+    // Color de fondo oscurecido para el sheet
+    final bg = Color.lerp(widget.bgColor, Colors.black, 0.4) ?? Colors.black;
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.85,
+      initialChildSize: 0.88,
       minChildSize: 0.5,
       maxChildSize: 0.95,
       builder: (_, controller) => Container(
         decoration: BoxDecoration(
-          color: bgColor.withOpacity(0.97),
+          color: bg,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: ListView(
@@ -93,85 +114,124 @@ class _AlbumDetailSheetState extends State<AlbumDetailSheet> {
                 ),
               ),
             ),
+            const SizedBox(height: 24),
+
+            // ── Portada grande centrada ─────────────────────────────────
+            Center(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: CachedNetworkImage(
+                  imageUrl: album.imageUrl,
+                  width: MediaQuery.of(context).size.width * 0.65,
+                  height: MediaQuery.of(context).size.width * 0.65,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) =>
+                      const ColoredBox(color: Color(0xFF1C1F2E)),
+                ),
+              ),
+            ),
             const SizedBox(height: 20),
 
-            // Portada pequeña + info
+            // ── Nombre y artista ────────────────────────────────────────
+            Text(
+              album.name,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              album.artist,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white60, fontSize: 15),
+            ),
+            const SizedBox(height: 12),
+
+            // ── Año y duración ──────────────────────────────────────────
             Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    album.imageUrl,
-                    width: 90,
-                    height: 90,
-                    fit: BoxFit.cover,
-                  ),
+                const Icon(
+                  Icons.calendar_today,
+                  color: Colors.white38,
+                  size: 13,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  album.yearFormatted,
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
                 ),
                 const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                const Icon(Icons.access_time, color: Colors.white38, size: 13),
+                const SizedBox(width: 4),
+                Text(
+                  album.durationFormatted,
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // ── Like + Estrellas ────────────────────────────────────────
+            Row(
+              children: [
+                // Botón Me gusta
+                GestureDetector(
+                  onTap: _toggleLike,
+                  child: Row(
                     children: [
-                      Text(
-                        album.name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                      Icon(
+                        _isLiked ? Icons.favorite : Icons.favorite_border,
+                        color: _isLiked
+                            ? const Color(0xFF7B6EF6)
+                            : Colors.white54,
+                        size: 20,
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(width: 6),
                       Text(
-                        album.artist,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
+                        _isLiked ? 'Te gusta' : 'Me gusta',
+                        style: TextStyle(
+                          color: _isLiked
+                              ? const Color(0xFF7B6EF6)
+                              : Colors.white54,
+                          fontSize: 13,
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      // Año y duración
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.calendar_today,
-                            color: Colors.white38,
-                            size: 13,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            album.yearFormatted,
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          const Icon(
-                            Icons.access_time,
-                            color: Colors.white38,
-                            size: 13,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            album.durationFormatted,
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
                       ),
                     ],
                   ),
                 ),
+                const Spacer(),
+                // Estrellas
+                Row(
+                  children: List.generate(5, (i) {
+                    final starValue = (i + 1).toDouble();
+                    return GestureDetector(
+                      onTap: () => _setRating((i + 1).toDouble()),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: Icon(
+                          i < _rating
+                              ? Icons.star_rounded
+                              : Icons.star_outline_rounded,
+                          color: i < _rating
+                              ? const Color(0xFF7B6EF6)
+                              : Colors.white24,
+                          size: 26,
+                        ),
+                      ),
+                    );
+                  }),
+                ),
               ],
             ),
+            const SizedBox(height: 16),
 
-            const SizedBox(height: 20),
-
-            // Géneros
+            // ── Géneros ─────────────────────────────────────────────────
             if (album.genres.isNotEmpty) ...[
               Wrap(
                 spacing: 8,
@@ -185,13 +245,13 @@ class _AlbumDetailSheetState extends State<AlbumDetailSheet> {
                           vertical: 5,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white12,
+                          color: Colors.white10,
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
                           g,
                           style: const TextStyle(
-                            color: Colors.white70,
+                            color: Colors.white60,
                             fontSize: 12,
                           ),
                         ),
@@ -199,37 +259,39 @@ class _AlbumDetailSheetState extends State<AlbumDetailSheet> {
                     )
                     .toList(),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
             ],
 
-            // Botones de acción
-            Row(
-              children: [
-                // Like
-                Expanded(
-                  child: _ActionButton(
-                    icon: _isLiked ? Icons.favorite : Icons.favorite_border,
-                    label: _isLiked ? 'Te gusta' : 'Me gusta',
-                    color: _isLiked ? Colors.redAccent : Colors.white70,
-                    onTap: _toggleLike,
-                  ),
+            // ── Botón Guardar en carpeta ────────────────────────────────
+            GestureDetector(
+              onTap: _showSaveFolderDialog,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white10,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const SizedBox(width: 12),
-                // Guardar en carpeta
-                Expanded(
-                  child: _ActionButton(
-                    icon: Icons.create_new_folder_outlined,
-                    label: 'Guardar',
-                    color: Colors.white70,
-                    onTap: _showSaveFolderDialog,
-                  ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.create_new_folder_outlined,
+                      color: Colors.white70,
+                      size: 20,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Guardar en carpeta',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-
             const SizedBox(height: 24),
 
-            // Tracklist
+            // ── Tracklist ───────────────────────────────────────────────
             Row(
               children: [
                 const Icon(Icons.queue_music, color: Colors.white54, size: 18),
@@ -296,44 +358,8 @@ class _AlbumDetailSheetState extends State<AlbumDetailSheet> {
   }
 }
 
-/// Botón de acción (like, guardar)
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
+// ── Folder Picker (sin cambios) ───────────────────────────────────────────────
 
-  const _ActionButton({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white10,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(width: 8),
-            Text(label, style: TextStyle(color: color, fontSize: 14)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Sheet para elegir o crear una carpeta
 class _FolderPickerSheet extends StatefulWidget {
   final AlbumModel album;
   final FirestoreService firestoreService;
@@ -359,10 +385,8 @@ class _FolderPickerSheetState extends State<_FolderPickerSheet> {
   Future<void> _createAndSave() async {
     final name = _newFolderController.text.trim();
     if (name.isEmpty) return;
-
     final folderId = await widget.firestoreService.createFolder(name);
     await widget.firestoreService.saveAlbumToFolder(folderId, widget.album);
-
     if (mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -397,8 +421,6 @@ class _FolderPickerSheetState extends State<_FolderPickerSheet> {
             ),
           ),
           const SizedBox(height: 16),
-
-          // Carpetas existentes
           StreamBuilder<List<Map<String, dynamic>>>(
             stream: widget.firestoreService.foldersStream(),
             builder: (_, snap) {
@@ -444,11 +466,8 @@ class _FolderPickerSheetState extends State<_FolderPickerSheet> {
               );
             },
           ),
-
           const Divider(color: Colors.white12),
           const SizedBox(height: 8),
-
-          // Crear carpeta nueva
           Row(
             children: [
               Expanded(

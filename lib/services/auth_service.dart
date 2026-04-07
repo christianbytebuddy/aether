@@ -1,94 +1,90 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AuthService {
-  // ── Instancias singleton (se crean una sola vez en toda la app) ────────────
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // ── Stream del estado de sesión (úsalo en main.dart con StreamBuilder) ────
   Stream<User?> get authStateChanges => _auth.authStateChanges();
-
   User? get currentUser => _auth.currentUser;
 
   // ── Email & Password ───────────────────────────────────────────────────────
 
-  /// Login con email y contraseña.
-  /// Lanza [FirebaseAuthException] en caso de error — la UI lo captura.
   Future<UserCredential> loginWithEmail(String email, String password) async {
     return _auth.signInWithEmailAndPassword(email: email, password: password);
   }
 
-  /// Registro con email, contraseña y nombre de usuario.
   Future<UserCredential> registerWithEmail(
     String email,
     String password,
     String username,
   ) async {
+    // 1. Crear en Firebase Auth
     final credential = await _auth.createUserWithEmailAndPassword(
       email: email,
       password: password,
     );
 
-    // Guarda el nombre de usuario en el perfil de Firebase Auth
-    await credential.user?.updateDisplayName(username);
+    final user = credential.user!;
+
+    // 2. Actualizar displayName en Auth (opcional, pero útil)
+    await user.updateDisplayName(username);
+
+    // 3. Guardar perfil completo en Firestore
+    await _saveUserToFirestore(user, username: username);
 
     return credential;
   }
 
   // ── Google Sign-In ─────────────────────────────────────────────────────────
 
-  /// Flujo:
-  /// 1. Abre el selector de cuenta de Google (GoogleSignIn)
-  /// 2. Obtiene los tokens de autenticación
-  /// 3. Los convierte en credencial de Firebase
-  /// 4. Inicia sesión en Firebase con esa credencial
-  ///
-  /// Retorna null si el usuario canceló el flujo (sin tirar error).
   Future<UserCredential?> signInWithGoogle() async {
-    // Paso 1: Selector de cuenta Google
     final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-
-    // Usuario canceló → salimos sin error
     if (googleUser == null) return null;
 
-    // Paso 2: Obtener tokens
     final GoogleSignInAuthentication googleAuth =
         await googleUser.authentication;
 
-    // Paso 3: Crear credencial de Firebase
     final AuthCredential credential = GoogleAuthProvider.credential(
       accessToken: googleAuth.accessToken,
       idToken: googleAuth.idToken,
     );
 
-    // Paso 4: Login en Firebase
-    return _auth.signInWithCredential(credential);
+    final userCredential = await _auth.signInWithCredential(credential);
+
+    // Solo crea el documento si es la primera vez que entra con Google
+    if (userCredential.additionalUserInfo?.isNewUser == true) {
+      await _saveUserToFirestore(userCredential.user!);
+    }
+
+    return userCredential;
   }
 
   // ── Cierre de sesión ───────────────────────────────────────────────────────
 
   Future<void> signOut() async {
-    await Future.wait([
-      _auth.signOut(),
-      _googleSignIn.signOut(), // También cierra la sesión de Google
-    ]);
+    await Future.wait([_auth.signOut(), _googleSignIn.signOut()]);
   }
 
-  // ── Helpers opcionales ─────────────────────────────────────────────────────
-
-  /// Envía email de recuperación de contraseña
   Future<void> sendPasswordReset(String email) async {
     await _auth.sendPasswordResetEmail(email: email);
   }
 
-  // ── Ejemplo: guardar usuario en Firestore (descomenta si lo necesitas) ─────
-  // Future<void> _saveUserToFirestore(User user, String username) async {
-  //   await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-  //     'uid': user.uid,
-  //     'username': username,
-  //     'email': user.email,
-  //     'createdAt': FieldValue.serverTimestamp(),
-  //   }, SetOptions(merge: true)); // merge:true evita sobreescribir si ya existe
-  // }
+  // ── Guardar perfil en Firestore ────────────────────────────────────────────
+
+  Future<void> _saveUserToFirestore(User user, {String? username}) async {
+    await _db.collection('users').doc(user.uid).set(
+      {
+        'uid': user.uid,
+        'email': user.email,
+        // Para Google: usa el displayName de Google si no hay username
+        'username': username ?? user.displayName ?? 'usuario',
+        'photoUrl': user.photoURL, // Google lo trae automáticamente
+        'createdAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    ); // merge: true protege datos si el doc ya existe
+  }
 }

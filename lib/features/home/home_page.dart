@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:aether/models/album_model.dart';
 import 'package:aether/services/spotify_service.dart';
 import 'package:aether/services/firestore_service.dart';
+import 'package:palette_generator/palette_generator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'album_card.dart';
 
 class HomePage extends StatefulWidget {
@@ -14,10 +17,21 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final _spotifyService = SpotifyService();
   final _firestoreService = FirestoreService();
+  late final PageController _pageController = PageController();
 
   List<AlbumModel> _albums = [];
   bool _isLoading = true;
   String? _error;
+
+  final Map<int, List<Color>> _palettes = {};
+
+  Color _bgTop = const Color(0xFF0B0F1A);
+  Color _bgBottom = const Color(0xFF0B0F1A);
+  int _currentIndex = 0;
+
+  static const _cacheKey = 'feed_cache';
+  static const _cacheTimeKey = 'feed_cache_time';
+  static const _cacheDuration = Duration(minutes: 30);
 
   @override
   void initState() {
@@ -25,24 +39,117 @@ class _HomePageState extends State<HomePage> {
     _loadFeed();
   }
 
-  Future<void> _loadFeed() async {
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  Future<List<AlbumModel>?> _loadFromCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheTime = prefs.getInt(_cacheTimeKey);
+      if (cacheTime == null) return null;
+
+      final savedAt = DateTime.fromMillisecondsSinceEpoch(cacheTime);
+      if (DateTime.now().difference(savedAt) > _cacheDuration) return null;
+
+      final raw = prefs.getString(_cacheKey);
+      if (raw == null) return null;
+
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list
+          .map((e) => AlbumModel.fromCacheJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _saveToCache(List<AlbumModel> albums) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = albums.map((a) => a.toCacheJson()).toList();
+      await prefs.setString(_cacheKey, jsonEncode(list));
+      await prefs.setInt(_cacheTimeKey, DateTime.now().millisecondsSinceEpoch);
+    } catch (_) {}
+  }
+
+  Future<void> _loadFeed({bool forceRefresh = false}) async {
     setState(() {
       _isLoading = true;
       _error = null;
     });
-
     try {
-      final albums = await _spotifyService.getFeed(limit: 10);
+      List<AlbumModel>? albums;
 
-      for (final album in albums) {
-        album.isLiked = await _firestoreService.isAlbumLiked(album.id);
+      // Intentar caché primero (salvo que sea refresh forzado)
+      if (!forceRefresh) {
+        albums = await _loadFromCache();
       }
 
-      if (mounted) setState(() => _albums = albums);
+      // Si no hay caché válida, llamar a Spotify
+      if (albums == null) {
+        albums = await _spotifyService.getFeed(limit: 10);
+        await _saveToCache(albums);
+      }
+
+      final likedResults = await Future.wait(
+        albums.map((a) => _firestoreService.isAlbumLiked(a.id)),
+      );
+      for (var i = 0; i < albums.length; i++) {
+        albums[i].isLiked = likedResults[i];
+      }
+      if (mounted) {
+        setState(() => _albums = albums!);
+        _loadPaletteFor(0);
+      }
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadPaletteFor(int index) async {
+    if (_palettes.containsKey(index)) return;
+    if (index < 0 || index >= _albums.length) return;
+    final url = _albums[index].imageUrl;
+    if (url.isEmpty) return;
+    try {
+      final generator = await PaletteGenerator.fromImageProvider(
+        NetworkImage(url),
+        size: const Size(150, 150),
+        maximumColorCount: 6,
+      );
+      if (!mounted) return;
+      final colors = [
+        generator.vibrantColor?.color ?? const Color(0xFF0B0F1A),
+        generator.darkVibrantColor?.color ??
+            generator.darkMutedColor?.color ??
+            const Color(0xFF0B0F1A),
+      ];
+      _palettes[index] = colors;
+      if (index == _currentIndex) {
+        setState(() {
+          _bgTop = colors[0];
+          _bgBottom = colors[1];
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _onPageChanged(int index) {
+    _currentIndex = index;
+    _loadPaletteFor(index + 1);
+
+    if (_palettes.containsKey(index)) {
+      setState(() {
+        _bgTop = _palettes[index]![0];
+        _bgBottom = _palettes[index]![1];
+      });
+    } else {
+      _loadPaletteFor(index);
     }
   }
 
@@ -52,54 +159,54 @@ class _HomePageState extends State<HomePage> {
     if (_error != null) return _buildError();
     if (_albums.isEmpty) return _buildEmpty();
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-
-      // ❌ SIN APPBAR
-      // ✅ DISEÑO FULLSCREEN + FLOATING TITLE
-      body: Stack(
-        children: [
-          // 🔄 FEED (NO CAMBIA)
-          RefreshIndicator(
-            onRefresh: _loadFeed,
-            color: const Color(0xFF7B6EF6),
-            backgroundColor: Colors.black,
-            child: PageView.builder(
+    return _AnimatedGradientBackground(
+      topColor: _bgTop,
+      bottomColor: _bgBottom,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        extendBody: true,
+        extendBodyBehindAppBar: true,
+        body: Stack(
+          children: [
+            PageView.builder(
+              controller: _pageController,
               scrollDirection: Axis.vertical,
               itemCount: _albums.length,
-              physics: const BouncingScrollPhysics(),
+              physics: const ClampingScrollPhysics(),
+              onPageChanged: _onPageChanged,
               itemBuilder: (_, index) => AlbumCard(
                 album: _albums[index],
                 firestoreService: _firestoreService,
+                bgColor: _palettes[index] != null
+                    ? _palettes[index]![1]
+                    : const Color(0xFF0B0F1A),
               ),
             ),
-          ),
-
-          // ✨ TÍTULO "AETHER" FLOTANTE (IGUAL A LA IMAGEN)
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 16,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Text(
-                'Aether',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.9),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.2,
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 16,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Text(
+                  'Aether',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.2,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildLoader() {
     return const Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Color(0xFF0B0F1A),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -118,7 +225,7 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildError() {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF0B0F1A),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -139,7 +246,7 @@ class _HomePageState extends State<HomePage> {
               ),
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: _loadFeed,
+                onPressed: () => _loadFeed(forceRefresh: true),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF7B6EF6),
                   shape: RoundedRectangleBorder(
@@ -160,13 +267,76 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildEmpty() {
     return const Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Color(0xFF0B0F1A),
       body: Center(
         child: Text(
           'No hay álbumes disponibles',
           style: TextStyle(color: Colors.white54),
         ),
       ),
+    );
+  }
+}
+
+// ── Fuera de HomePage ─────────────────────────────────────────────────────────
+
+class _AnimatedGradientBackground extends ImplicitlyAnimatedWidget {
+  final Color topColor;
+  final Color bottomColor;
+  final Widget child;
+
+  const _AnimatedGradientBackground({
+    required this.topColor,
+    required this.bottomColor,
+    required this.child,
+  }) : super(
+         duration: const Duration(milliseconds: 600),
+         curve: Curves.easeInOut,
+       );
+
+  @override
+  ImplicitlyAnimatedWidgetState<_AnimatedGradientBackground> createState() =>
+      _AnimatedGradientBackgroundState();
+}
+
+class _AnimatedGradientBackgroundState
+    extends AnimatedWidgetBaseState<_AnimatedGradientBackground> {
+  ColorTween? _topTween;
+  ColorTween? _bottomTween;
+
+  @override
+  void forEachTween(TweenVisitor<dynamic> visitor) {
+    _topTween =
+        visitor(
+              _topTween,
+              widget.topColor,
+              (value) => ColorTween(begin: value as Color),
+            )
+            as ColorTween?;
+
+    _bottomTween =
+        visitor(
+              _bottomTween,
+              widget.bottomColor,
+              (value) => ColorTween(begin: value as Color),
+            )
+            as ColorTween?;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            _topTween?.evaluate(animation) ?? widget.topColor,
+            _bottomTween?.evaluate(animation) ?? widget.bottomColor,
+          ],
+        ),
+      ),
+      child: widget.child,
     );
   }
 }
