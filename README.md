@@ -59,4 +59,28 @@ El proyecto usa Firebase y Spotify. Necesitas:
 - `google-services.json` en `android/app/` (Firebase)
 - Las API keys de Spotify están en `spotify_service.dart` (mover a variables de entorno antes de producción)
 
-## 📁 Estructura del proyecto
+## Estructura del proyecto
+
+lib/
+├── core/              # Configuración Firebase
+├── features/
+│   ├── auth/          # Login y registro
+│   ├── home/          # Feed principal
+│   ├── aethra/        # IA musical
+│   ├── community/     # Comunidad
+│   └── echo/          # Minijuego
+├── models/            # Modelos de datos
+├── services/          # Spotify, Firestore, Auth
+└── main.dart
+
+## 🔮 Próximas funcionalidades
+
+- [ ] Pantalla Pulse
+- [ ] Moderación de comunidad
+- [ ] Foto de perfil real
+- [ ] Notificaciones push
+- [ ] Modo Extended Quota Spotify
+
+## 👤 Autor
+
+Desarrollado por Christian — proyecto académico/personal.
