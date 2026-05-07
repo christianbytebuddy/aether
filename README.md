@@ -73,7 +73,7 @@ lib/
 ├── services/          # Spotify, Firestore, Auth
 └── main.dart
 
-## 🔮 Próximas funcionalidades
+## Próximas funcionalidades
 
 - [ ] Pantalla Pulse
 - [ ] Moderación de comunidad
@@ -81,6 +81,6 @@ lib/
 - [ ] Notificaciones push
 - [ ] Modo Extended Quota Spotify
 
-## 👤 Autor
+## Autor
 
 Desarrollado por Christian — proyecto académico/personal.
