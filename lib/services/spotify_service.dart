@@ -11,8 +11,8 @@ class SpotifyService {
   String? _accessToken;
   DateTime? _tokenExpiry;
 
+  //'5052Ip89wdW8EGdpjEpNeq', // formula of love
   static const List<String> _curatedAlbumIds = [
-    '5052Ip89wdW8EGdpjEpNeq', // formula of love
     '0EhZEM4RRz0yioTgucDhJq', // how sweet
     '3RQQmkQEvNCY4prGKE6oc5', // un verano sin ti
     '2xkZV2Hl1Omi8rk2D7t5lN', // the new abnormal

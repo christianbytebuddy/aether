@@ -598,11 +598,10 @@ class _PostDetailPageState extends State<PostDetailPage> {
                                         width: 64,
                                         height: 64,
                                         fit: BoxFit.cover,
-                                        placeholder: (_, __) =>
-                                            const ColoredBox(
-                                              color: Color(0xFF1C1F2E),
-                                            ),
-                                        errorWidget: (_, __, ___) =>
+                                        placeholder: (_, _) => const ColoredBox(
+                                          color: Color(0xFF1C1F2E),
+                                        ),
+                                        errorWidget: (_, _, _) =>
                                             const ColoredBox(
                                               color: Color(0xFF1C1F2E),
                                             ),
