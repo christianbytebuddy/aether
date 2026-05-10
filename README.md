@@ -1,86 +1,215 @@
-# Aether
+# Aether — Descubre música como nunca antes
 
-Aether es una app móvil de descubrimiento musical desarrollada en Flutter. 
-Combina un feed de álbumes estilo TikTok, una IA musical, comunidad de usuarios y un minijuego de adivinanza de canciones.
+Aether es una app móvil de descubrimiento musical que combina un feed de álbumes estilo TikTok, una IA musical llamada Aethra, una comunidad de usuarios y Echo, un minijuego donde adivinas canciones de tu artista favorito.
 
-## Funcionalidades
+> Desarrollado con Flutter · Firebase · Spotify API · Deezer API
 
-- **Home** — Feed vertical de álbumes con gradiente dinámico generado desde la portada
-- **Aethra** — IA musical integrada (powered by Gemini)
-- **Comunidad** — Usuarios publican playlists, comentan y dan likes en tiempo real
-- **Echo** — Minijuego: adivina la canción de tu artista favorito en 5 segundos
-- **Perfil** — Biblioteca personal, carpetas, álbumes favoritos y estadísticas de Spotify
-
-## Stack Tecnológico
-
-| Tecnología | Uso |
-|---|---|
-| Flutter | Framework principal |
-| Firebase Auth | Autenticación de usuarios |
-| Cloud Firestore | Base de datos en tiempo real |
-| Spotify API | Datos de álbumes y artistas |
-| Deezer API | Previews de audio para Echo |
-| audioplayers | Reproducción de audio |
-| cached_network_image | Carga optimizada de imágenes |
+---
 
 ## Pantallas
 
-- Login / Registro
-- Home (feed de álbumes)
-- Aethra (chat con IA musical)
-- Comunidad (posts, likes, comentarios)
-- Echo (minijuego musical)
-- Perfil (biblioteca y estadísticas)
+| Pantalla | Descripción |
+|---|---|
+| **Home** | Feed vertical de álbumes con gradiente dinámico extraído de cada portada |
+| **Aethra** | Chat con una IA especializada en música |
+| **Comunidad** | Publica playlists, comenta y da likes en tiempo real |
+| **Echo** | Minijuego: elige un artista y adivina sus canciones en 5 segundos |
+| **Perfil** | Tu biblioteca, carpetas, álbumes favoritos y estadísticas de Spotify |
 
-## Cómo correr el proyecto
+---
 
-### Requisitos
-- Flutter SDK >= 3.0.0
-- Dart >= 3.0.0
-- Android Studio o VS Code
-- Dispositivo Android o emulador
+## 🛠️ Requisitos previos
 
-### Instalación
+Antes de empezar, asegúrate de tener instalado lo siguiente:
+
+- [Flutter SDK](https://docs.flutter.dev/get-started/install) >= 3.0.0
+- [Android Studio](https://developer.android.com/studio) o [VS Code](https://code.visualstudio.com/)
+- Un dispositivo Android físico **o** un emulador Android configurado
+- [Git](https://git-scm.com/)
+
+Para verificar que Flutter está correctamente instalado, corre en tu terminal:
 
 ```bash
-# Clonar el repositorio
-git clone https://github.com/christianbytebuddy/aether.git
+flutter doctor
+```
+
+Todos los ítems deben aparecer en verde ✅ (excepto iOS si estás en Windows, eso es normal).
+
+---
+
+## Instalación paso a paso
+
+### 1. Clona el repositorio
+
+```bash
+git clone https://github.com/christianmogolla/aether.git
 cd aether
+```
 
-# Instalar dependencias
+### 2. Instala las dependencias
+
+```bash
 flutter pub get
+```
 
-# Correr en dispositivo
+### 3. Configura Firebase
+
+Aether usa Firebase para autenticación y base de datos. Necesitas agregar el archivo de configuración:
+
+1. Ve a [Firebase Console](https://console.firebase.google.com/)
+2. Crea un proyecto nuevo o usa uno existente
+3. Agrega una app Android con el package name `com.example.aether`
+4. Descarga el archivo `google-services.json`
+5. Colócalo en la siguiente ruta dentro del proyecto:
+
+android/
+└── app/
+└── google-services.json  ← aquí
+
+En Firebase Console, activa los siguientes servicios:
+- **Authentication** → Método: Email/Contraseña
+- **Firestore Database** → Crear base de datos en modo producción
+
+### 4. Configura las reglas de Firestore
+
+En Firebase Console → Firestore → Reglas, pega lo siguiente:
+
+rules_version = '2';
+service cloud.firestore {
+match /databases/{database}/documents {
+match /users/{uid}/{document=**} {
+  allow read, write: if request.auth != null && request.auth.uid == uid;
+}
+
+match /community_posts/{postId} {
+  allow read: if request.auth != null;
+  allow create: if request.auth != null;
+  allow update, delete: if request.auth != null
+    && request.auth.uid == resource.data.uid;
+
+  match /comments/{commentId} {
+    allow read: if request.auth != null;
+    allow create: if request.auth != null;
+  }
+}
+  }
+}
+
+### 5. Corre la app
+
+Conecta tu dispositivo Android por USB (con depuración USB activada) o inicia un emulador, luego ejecuta:
+
+```bash
 flutter run
 ```
 
-### Variables necesarias
-El proyecto usa Firebase y Spotify. Necesitas:
-- `google-services.json` en `android/app/` (Firebase)
-- Las API keys de Spotify están en `spotify_service.dart` (mover a variables de entorno antes de producción)
+Si tienes varios dispositivos conectados y quieres elegir uno específico:
+
+```bash
+flutter devices        # lista los dispositivos disponibles
+flutter run -d <id>    # corre en el dispositivo elegido
+```
+
+---
+
+## APIs utilizadas
+
+Aether usa dos APIs externas. Las credenciales de Spotify ya están incluidas en el código para facilitar la ejecución, pero se recomienda reemplazarlas por las tuyas propias en producción.
+
+### Spotify API (datos de álbumes y búsqueda de artistas)
+1. Ve a [Spotify for Developers](https://developer.spotify.com/dashboard)
+2. Crea una app
+3. Copia el `Client ID` y `Client Secret`
+4. Pégalos en `lib/services/spotify_service.dart`:
+
+```dart
+static const _clientId = 'TU_CLIENT_ID';
+static const _clientSecret = 'TU_CLIENT_SECRET';
+```
+
+### Deezer API (previews de audio para Echo)
+No requiere configuración. Es una API pública gratuita que Aether usa automáticamente.
+
+---
 
 ## Estructura del proyecto
-
 lib/
-├── core/              # Configuración Firebase
+├── core/
+│   ├── constants.dart
+│   └── firebase_options.dart
 ├── features/
-│   ├── auth/          # Login y registro
-│   ├── home/          # Feed principal
-│   ├── aethra/        # IA musical
-│   ├── community/     # Comunidad
-│   └── echo/          # Minijuego
-├── models/            # Modelos de datos
-├── services/          # Spotify, Firestore, Auth
+│   ├── auth/
+│   │   ├── login_page.dart
+│   │   └── register_page.dart
+│   ├── home/
+│   │   ├── home_page.dart
+│   │   ├── album_card.dart
+│   │   ├── album_detail_sheet.dart
+│   │   └── folder_detail_page.dart
+│   ├── aethra/
+│   │   └── aethra_page.dart
+│   ├── community/
+│   │   ├── community_page.dart
+│   │   └── post_detail_page.dart
+│   └── echo/
+│       ├── echo_page.dart
+│       ├── echo_game_page.dart
+│       └── echo_result_page.dart
+├── models/
+│   ├── album_model.dart
+│   └── chat_message.dart
+├── services/
+│   ├── auth_service.dart
+│   ├── firestore_service.dart
+│   ├── spotify_service.dart
+│   ├── spotify_auth_service.dart
+│   └── aethra_service.dart
+├── profile_page.dart
 └── main.dart
 
-## Próximas funcionalidades
+---
+
+## Problemas comunes
+
+**La app no compila / flutter doctor muestra errores**
+→ Asegúrate de tener el Android SDK instalado y aceptar las licencias con:
+```bash
+flutter doctor --android-licenses
+```
+
+**Error: `google-services.json` no encontrado**
+→ Verifica que el archivo esté exactamente en `android/app/google-services.json`
+
+**Error de permisos en Firestore**
+→ Verifica que las reglas de Firestore estén correctamente configuradas (paso 4)
+
+**El audio en Echo no suena**
+→ Verifica que el dispositivo no esté en silencio y que tenga conexión a internet activa
+
+**Las imágenes no cargan**
+→ Verifica la conexión a internet. Las imágenes vienen de Spotify CDN y Deezer CDN
+
+---
+
+## Funcionalidades en desarrollo
 
 - [ ] Pantalla Pulse
-- [ ] Moderación de comunidad
+- [ ] Moderación de comunidad (rol moderador)
 - [ ] Foto de perfil real
 - [ ] Notificaciones push
-- [ ] Modo Extended Quota Spotify
+- [ ] Rating de estrellas persistente en Firestore
+- [ ] Validación de username único al registrarse
+- [ ] Migración de API keys a variables de entorno
+
+---
 
 ## Autor
 
-Desarrollado por Christian — proyecto académico/personal.
+**Christian**  
+Proyecto personal — desarrollado con Flutter.
+
+---
+
+## Licencia
+
+Este proyecto es de uso personal/académico. No está destinado a uso comercial.
