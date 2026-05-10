@@ -42,7 +42,7 @@ Todos los ítems deben aparecer en verde ✅ (excepto iOS si estás en Windows, 
 ### 1. Clona el repositorio
 
 ```bash
-git clone https://github.com/christianmogolla/aether.git
+git clone https://github.com/christianbytebuddy/aether.git
 cd aether
 ```
 
