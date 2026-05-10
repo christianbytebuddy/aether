@@ -44,7 +44,7 @@ Combina un feed de álbumes estilo TikTok, una IA musical, comunidad de usuarios
 
 ```bash
 # Clonar el repositorio
-git clone https://github.com/tu-usuario/aether.git
+git clone https://github.com/christianbytebuddy/aether.git
 cd aether
 
 # Instalar dependencias
