@@ -97,6 +97,8 @@ match /community_posts/{postId} {
 
 ### 5. Corre la app
 
+Nota: Este paso no es obligatorio, sin embargo sí es recomendado para desplegar la app directamente en un dispositivo celular.
+
 Conecta tu dispositivo Android por USB (con depuración USB activada) o inicia un emulador, luego ejecuta:
 
 ```bash
@@ -212,4 +214,4 @@ Proyecto personal — desarrollado con Flutter.
 
 ## Licencia
 
-Este proyecto es de uso personal/académico. No está destinado a uso comercial.
+Este proyecto es de uso académico. No está destinado a uso comercial.
