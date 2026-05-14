@@ -136,31 +136,36 @@ No requiere configuración. Es una API pública gratuita que Aether usa automát
 
 ## Estructura del proyecto
 lib/
-  ├── core/
-  │   ├── constants.dart
-  │   └── firebase_options.dart
-  ├── features/
-  │   ├── auth/
-  │   │   ├── login_page.dart
-  │   │   └── register_page.dart
-  │   ├── home/
-  │   │   ├── home_page.dart
-  │   │   ├── album_card.dart
-  │   │   ├── album_detail_sheet.dart
-  │   │   └── folder_detail_page.dart
-  │   ├── aethra/
-  │   │   └── aethra_page.dart
-  │   ├── community/
-  │   │   ├── community_page.dart
-  │   │   └── post_detail_page.dart
-  │   └── echo/
-  │       ├── echo_page.dart
-  │       ├── echo_game_page.dart
-  │       └── echo_result_page.dart
-  ├── models/
-  │   ├── album_model.dart
-  │   └── chat_message.dart
-  ├── services/
+
+├── core/
+
+│   ├── constants.dart
+
+│   └── firebase_options.dart
+
+├── features/
+
+│   ├── auth/
+│   │   ├── login_page.dart
+│   │   └── register_page.dart
+│   ├── home/
+│   │   ├── home_page.dart
+│   │   ├── album_card.dart
+│   │   ├── album_detail_sheet.dart
+│   │   └── folder_detail_page.dart
+│   ├── aethra/
+│   │   └── aethra_page.dart
+│   ├── community/
+│   │   ├── community_page.dart
+│   │   └── post_detail_page.dart
+│   └── echo/
+│       ├── echo_page.dart
+│       ├── echo_game_page.dart
+│       └── echo_result_page.dart
+├── models/
+│   ├── album_model.dart
+│   └── chat_message.dart
+├── services/
   │   ├── auth_service.dart
   │   ├── firestore_service.dart
   │   ├── spotify_service.dart
