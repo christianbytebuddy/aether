@@ -136,6 +136,7 @@ No requiere configuración. Es una API pública gratuita que Aether usa automát
 
 ## Estructura del proyecto
 lib/
+
 ├── core/
 │   ├── constants.dart
 │   └── firebase_options.dart
