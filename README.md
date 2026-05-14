@@ -138,13 +138,9 @@ No requiere configuración. Es una API pública gratuita que Aether usa automát
 lib/
 
 ├── core/
-
 │   ├── constants.dart
-
 │   └── firebase_options.dart
-
 ├── features/
-
 │   ├── auth/
 │   │   ├── login_page.dart
 │   │   └── register_page.dart
