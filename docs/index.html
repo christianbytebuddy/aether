@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aether — Descubre tu próximo álbum favorito</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0B0F1A;
+    --card:#111827;
+    --surface:#1A1F35;
+    --accent:#7B6EF6;
+    --accent-glow:#A78BFA;
+    --text:#F5F5F7;
+    --text-dim:rgba(245,245,247,.7);
+    --text-faint:rgba(245,245,247,.4);
+    --text-ghost:rgba(245,245,247,.24);
+    --radius:18px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    overflow-x:hidden;
+  }
+  h1,h2,h3,.display{font-family:'Space Grotesk',sans-serif;}
+  a{color:inherit;text-decoration:none;}
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important;}
+  }
+
+  /* ---------- NAV ---------- */
+  nav{
+    position:fixed; top:0; left:0; right:0; z-index:50;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:20px 6vw;
+    backdrop-filter:blur(14px);
+    background:rgba(11,15,26,.6);
+    border-bottom:1px solid rgba(255,255,255,.06);
+  }
+  .brand{display:flex; align-items:center; gap:10px; font-weight:700; font-size:18px; letter-spacing:.5px;}
+  .brand-mark{
+    width:30px;height:30px;border-radius:9px;
+    background:linear-gradient(135deg,var(--accent),#4C3FC7);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 22px rgba(123,110,246,.55);
+  }
+  .brand-mark svg{width:16px;height:16px;}
+  nav .nav-cta{
+    padding:9px 18px; border-radius:100px;
+    background:var(--accent); font-size:13px; font-weight:600;
+    box-shadow:0 0 24px rgba(123,110,246,.35);
+  }
+
+  /* ---------- HERO ---------- */
+  .hero{
+    position:relative; min-height:100svh;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:120px 6vw 80px;
+    isolation:isolate;
+  }
+  .hero-glow{
+    position:absolute; inset:0; z-index:-1; overflow:hidden;
+  }
+  .blob{
+    position:absolute; border-radius:50%; filter:blur(90px); opacity:.55;
+    animation:drift 16s ease-in-out infinite alternate;
+  }
+  .blob-a{width:38vw;height:38vw; background:#7B6EF6; top:-8%; left:-6%; animation-delay:0s;}
+  .blob-b{width:32vw;height:32vw; background:#4C3FC7; bottom:-10%; right:-4%; animation-delay:-6s;}
+  .blob-c{width:24vw;height:24vw; background:#A78BFA; top:35%; left:55%; animation-delay:-11s;}
+  @keyframes drift{
+    0%{transform:translate(0,0) scale(1);}
+    100%{transform:translate(4%,6%) scale(1.12);}
+  }
+  .eyebrow{
+    font-size:12px; letter-spacing:2.5px; text-transform:uppercase;
+    color:var(--accent-glow); font-weight:600; margin-bottom:22px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .eyebrow::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent);}
+  .hero h1{
+    font-size:clamp(38px,7vw,84px); line-height:1.02; font-weight:700;
+    max-width:16ch; letter-spacing:-1.5px;
+  }
+  .hero h1 .grad{
+    background:linear-gradient(100deg,#fff 20%,var(--accent-glow) 60%,var(--accent) 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .hero p{
+    margin-top:24px; max-width:46ch; font-size:17px; line-height:1.65;
+    color:var(--text-dim);
+  }
+  .hero-actions{margin-top:42px; display:flex; gap:14px; flex-wrap:wrap; justify-content:center;}
+  .btn{
+    display:inline-flex; align-items:center; gap:10px;
+    padding:15px 28px; border-radius:14px; font-weight:600; font-size:15px;
+    transition:transform .2s ease, box-shadow .2s ease;
+  }
+  .btn:hover{transform:translateY(-2px);}
+  .btn-primary{
+    background:var(--accent); color:#fff;
+    box-shadow:0 8px 30px rgba(123,110,246,.4);
+  }
+  .btn-primary:hover{box-shadow:0 10px 36px rgba(123,110,246,.55);}
+  .btn-ghost{
+    background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12); color:var(--text);
+  }
+  .btn-ghost:hover{background:rgba(255,255,255,.09);}
+  .hero-meta{
+    margin-top:28px; font-size:12.5px; color:var(--text-faint);
+    display:flex; gap:18px; flex-wrap:wrap; justify-content:center;
+  }
+
+  /* floating phone in hero */
+  .hero-phone-wrap{margin-top:64px; position:relative;}
+  .phone{
+    width:230px; height:470px; border-radius:38px;
+    background:var(--surface);
+    border:6px solid #05070d;
+    box-shadow:0 30px 70px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.04);
+    position:relative; overflow:hidden;
+    animation:float 5s ease-in-out infinite;
+  }
+  @keyframes float{
+    0%,100%{transform:translateY(0);}
+    50%{transform:translateY(-14px);}
+  }
+  .phone-notch{
+    position:absolute; top:12px; left:50%; transform:translateX(-50%);
+    width:70px; height:16px; background:#05070d; border-radius:10px; z-index:5;
+  }
+  .phone-screen{
+    position:absolute; inset:0;
+    background:linear-gradient(200deg,#3a2e8f 0%, #17102f 55%, #0B0F1A 100%);
+  }
+  .phone-card{
+    position:absolute; left:16px; right:16px; bottom:70px; top:56px;
+    background:rgba(17,24,39,.65); border-radius:20px; backdrop-filter:blur(6px);
+    border:1px solid rgba(255,255,255,.06);
+    display:flex; flex-direction:column; padding:14px;
+  }
+  .phone-cover{
+    width:100%; aspect-ratio:1; border-radius:12px;
+    background:linear-gradient(135deg,#7B6EF6,#332969);
+    margin-bottom:10px;
+  }
+  .phone-line{height:8px; border-radius:4px; background:rgba(255,255,255,.16); margin-bottom:6px;}
+  .phone-line.w60{width:60%;}
+  .phone-line.w40{width:40%; background:rgba(255,255,255,.08);}
+  .phone-navbar{
+    position:absolute; left:14px; right:14px; bottom:16px; height:46px;
+    background:rgba(11,15,26,.85); border-radius:16px;
+    display:flex; align-items:center; justify-content:space-around;
+    border:1px solid rgba(255,255,255,.06);
+  }
+  .phone-navbar span{width:14px; height:14px; border-radius:5px; background:rgba(255,255,255,.2);}
+  .phone-navbar span:nth-child(2){background:var(--accent); box-shadow:0 0 10px var(--accent);}
+
+  /* ---------- SECTIONS ---------- */
+  section{padding:120px 6vw;}
+  .section-head{max-width:640px; margin:0 auto 64px; text-align:center;}
+  .section-head .eyebrow{justify-content:center;}
+  .section-head h2{font-size:clamp(28px,4vw,44px); font-weight:700; letter-spacing:-1px;}
+  .section-head p{margin-top:16px; color:var(--text-dim); font-size:16px; line-height:1.6;}
+
+  /* features grid — 6 tabs */
+  .features{
+    display:grid; grid-template-columns:repeat(3,1fr); gap:20px;
+    max-width:1180px; margin:0 auto;
+  }
+  @media (max-width:900px){.features{grid-template-columns:repeat(2,1fr);}}
+  @media (max-width:600px){.features{grid-template-columns:1fr;}}
+  .feature-card{
+    background:var(--card); border:1px solid rgba(255,255,255,.06);
+    border-radius:var(--radius); padding:30px 26px;
+    position:relative; overflow:hidden;
+    transition:transform .25s ease, border-color .25s ease;
+  }
+  .feature-card:hover{transform:translateY(-4px); border-color:rgba(123,110,246,.4);}
+  .feature-num{
+    font-family:'Space Grotesk',sans-serif; font-size:12px; color:var(--text-ghost);
+    letter-spacing:1px; margin-bottom:20px; display:block;
+  }
+  .feature-icon{
+    width:44px;height:44px;border-radius:12px; margin-bottom:18px;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(123,110,246,.14); color:var(--accent-glow);
+  }
+  .feature-card h3{font-size:18px; font-weight:600; margin-bottom:8px;}
+  .feature-card p{font-size:14px; color:var(--text-dim); line-height:1.55;}
+
+  /* showcase — mockup rows */
+  .showcase{max-width:1180px; margin:0 auto; display:flex; flex-direction:column; gap:140px;}
+  .showcase-row{
+    display:grid; grid-template-columns:1fr 1fr; gap:60px; align-items:center;
+  }
+  .showcase-row.reverse{grid-template-columns:1fr 1fr;}
+  .showcase-row.reverse .showcase-text{order:2;}
+  .showcase-row.reverse .showcase-visual{order:1;}
+  @media (max-width:860px){
+    .showcase-row, .showcase-row.reverse{grid-template-columns:1fr;}
+    .showcase-row.reverse .showcase-text, .showcase-row.reverse .showcase-visual{order:initial;}
+  }
+  .showcase-tag{
+    font-size:12px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase;
+    color:var(--accent-glow); margin-bottom:14px;
+  }
+  .showcase-text h3{font-size:clamp(24px,3vw,32px); font-weight:700; margin-bottom:16px; letter-spacing:-.5px;}
+  .showcase-text p{color:var(--text-dim); font-size:15.5px; line-height:1.7; max-width:44ch;}
+  .showcase-visual{display:flex; justify-content:center;}
+  .mock-phone{
+    width:260px; height:530px; border-radius:40px; background:var(--surface);
+    border:7px solid #05070d; box-shadow:0 30px 80px rgba(0,0,0,.55);
+    position:relative; overflow:hidden;
+  }
+  .mock-notch{position:absolute; top:14px; left:50%; transform:translateX(-50%); width:76px; height:18px; background:#05070d; border-radius:10px; z-index:5;}
+  .mock-body{position:absolute; inset:0; padding:36px 14px 70px;}
+
+  /* mini mockup variants */
+  .mock-home{background:linear-gradient(200deg,#3a2e8f,#17102f 55%,#0B0F1A);}
+  .mock-home .cover{width:100%; aspect-ratio:.82; border-radius:16px; background:linear-gradient(140deg,#7B6EF6,#2a2166); margin-bottom:14px; box-shadow:0 10px 26px rgba(123,110,246,.35);}
+  .mock-home .pillrow{display:flex; gap:8px; margin-bottom:10px;}
+  .mock-home .pill{padding:5px 10px; font-size:9px; border-radius:100px; background:rgba(255,255,255,.1); color:rgba(255,255,255,.7);}
+
+  .mock-aethra{background:#0e1220;}
+  .bubble{max-width:80%; padding:10px 13px; border-radius:14px; font-size:11px; margin-bottom:10px; line-height:1.4;}
+  .bubble-bot{background:var(--card); border-left:2px solid var(--accent); border-radius:4px 14px 14px 14px;}
+  .bubble-user{background:var(--accent); margin-left:auto; border-radius:14px 4px 14px 14px; color:#fff;}
+  .mini-albums{display:flex; gap:8px; margin-top:6px;}
+  .mini-album{width:38px;height:38px;border-radius:8px;background:linear-gradient(135deg,#7B6EF6,#332969);}
+
+  .mock-community{background:#0e1220;}
+  .post{background:var(--card); border-radius:14px; padding:10px; margin-bottom:12px; border:1px solid rgba(255,255,255,.05);}
+  .post-head{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
+  .avatar{width:22px;height:22px;border-radius:50%; background:var(--accent);}
+  .post-cover{width:100%; aspect-ratio:1.6; border-radius:8px; background:linear-gradient(135deg,#4C3FC7,#7B6EF6); margin-bottom:8px;}
+  .post-actions{display:flex; gap:14px; font-size:10px; color:rgba(255,255,255,.4);}
+
+  .mock-pulse{background:#0e1220;}
+  .bars{display:flex; align-items:flex-end; gap:8px; height:120px; margin:20px 0;}
+  .bar{flex:1; border-radius:6px 6px 0 0; background:linear-gradient(180deg,var(--accent),#2a2166);}
+  .stat-chip{background:var(--card); border-radius:12px; padding:10px 12px; margin-bottom:8px; font-size:10px; color:rgba(255,255,255,.6); display:flex; justify-content:space-between;}
+  .stat-chip b{color:#fff; font-family:'Space Grotesk';}
+
+  .mock-echo{background:radial-gradient(circle at 50% 30%,#2a2166,#0e1220 70%);}
+  .waveform{display:flex; align-items:center; justify-content:center; gap:3px; height:80px; margin:24px 0;}
+  .wave-bar{width:4px; border-radius:2px; background:var(--accent-glow); animation:wave 1.2s ease-in-out infinite;}
+  @keyframes wave{0%,100%{transform:scaleY(.3);} 50%{transform:scaleY(1);}}
+  .timer-ring{width:70px;height:70px;border-radius:50%; border:4px solid rgba(255,255,255,.1); border-top-color:var(--accent); margin:0 auto 16px; animation:spin 3s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .mock-perfil{background:#0e1220;}
+  .grid9{display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin-top:16px;}
+  .grid9 div{aspect-ratio:1; border-radius:6px; background:linear-gradient(135deg,#7B6EF6,#241d55);}
+  .grid9 div:nth-child(3n){background:linear-gradient(135deg,#4C3FC7,#1a153f);}
+  .grid9 div:nth-child(3n+2){background:linear-gradient(135deg,#A78BFA,#332969);}
+
+  /* CTA final */
+  .cta-final{
+    text-align:center; max-width:640px; margin:0 auto; position:relative; padding:100px 6vw;
+  }
+  .cta-final h2{font-size:clamp(30px,5vw,52px); font-weight:700; letter-spacing:-1px; margin-bottom:20px;}
+  .cta-final p{color:var(--text-dim); font-size:16px; margin-bottom:38px;}
+
+  footer{
+    padding:40px 6vw; text-align:center; color:var(--text-ghost); font-size:12.5px;
+    border-top:1px solid rgba(255,255,255,.06);
+  }
+  footer a{color:var(--accent-glow);}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="brand">
+    <div class="brand-mark">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" stroke="#fff" stroke-width="2"/><circle cx="18" cy="16" r="3" stroke="#fff" stroke-width="2"/></svg>
+    </div>
+    Aether
+  </div>
+  <a href="#descargar" class="nav-cta">Descargar APK</a>
+</nav>
+
+<header class="hero">
+  <div class="hero-glow">
+    <div class="blob blob-a"></div>
+    <div class="blob blob-b"></div>
+    <div class="blob blob-c"></div>
+  </div>
+  <div class="eyebrow">Android · Proyecto de grado SENA</div>
+  <h1>Descubre música que <span class="grad">se siente hecha para ti.</span></h1>
+  <p>Aether es tu espacio para explorar álbumes, chatear con una IA musical, competir adivinando canciones y llevar tu diario musical — todo en una sola app.</p>
+  <div class="hero-actions" id="descargar">
+    <a href="https://github.com/christianbytebuddy/aether/releases/latest" class="btn btn-primary">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 3v13m0 0l-5-5m5 5l5-5M4 21h16" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Descargar para Android
+    </a>
+    <a href="https://github.com/christianbytebuddy/aether" class="btn btn-ghost">Ver el código</a>
+  </div>
+  <div class="hero-meta">
+    <span>Android 8.0+</span>
+    <span>·</span>
+    <span>~54 MB</span>
+    <span>·</span>
+    <span>Gratis</span>
+  </div>
+  <div class="hero-phone-wrap">
+    <div class="phone">
+      <div class="phone-notch"></div>
+      <div class="phone-screen"></div>
+      <div class="phone-card">
+        <div class="phone-cover"></div>
+        <div class="phone-line w60"></div>
+        <div class="phone-line w40"></div>
+      </div>
+      <div class="phone-navbar">
+        <span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="section-head">
+    <div class="eyebrow">Todo en un solo lugar</div>
+    <h2>Seis formas de vivir la música</h2>
+    <p>Cada pestaña de Aether resuelve algo distinto: descubrir, conversar, compartir, medir, jugar y guardar.</p>
+  </div>
+  <div class="features">
+    <div class="feature-card">
+      <span class="feature-num">01 · Home</span>
+      <div class="feature-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M4 14h16" stroke="currentColor" stroke-width="1.8"/></svg>
+      </div>
+      <h3>Feed que cambia de color</h3>
+      <p>Un carrusel de álbumes donde el fondo toma el color real de cada portada, para que cada disco se sienta como un mundo distinto.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-num">02 · Aethra</span>
+      <div class="feature-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      </div>
+      <h3>Tu asistente musical IA</h3>
+      <p>Cuéntale qué te gustaría escuchar y Aethra te responde con álbumes reales que puedes abrir y reproducir al instante.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-num">03 · Comunidad</span>
+      <div class="feature-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.6"/><circle cx="16" cy="16" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 9.5l3 5" stroke="currentColor" stroke-width="1.6"/></svg>
+      </div>
+      <h3>Comparte lo que escuchas</h3>
+      <p>Publica álbumes, comenta y dale like a lo que otros están descubriendo. Tu música, en conversación con la de otros.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-num">04 · Pulse</span>
+      <div class="feature-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 12h4l2-7 4 14 2-7h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h3>Tus estadísticas reales</h3>
+      <p>Conecta tu cuenta de Spotify y descubre tus artistas top, tus canciones más escuchadas y tu día más activo.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-num">05 · Echo</span>
+      <div class="feature-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M9 9l6 6M15 9l-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </div>
+      <h3>Adivina la canción</h3>
+      <p>Escucha un preview de 30 segundos y adivina qué suena, contra el reloj. Tres niveles de dificultad, cinco rondas.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-num">06 · Perfil</span>
+      <div class="feature-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.6"/></svg>
+      </div>
+      <h3>Carpetas y diario musical</h3>
+      <p>Organiza tus álbumes favoritos en carpetas, califícalos estilo Letterboxd y lleva un diario semanal de lo que escuchas.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="section-head">
+    <div class="eyebrow">Recorrido</div>
+    <h2>Así se ve por dentro</h2>
+    <p>Una mirada a las pantallas principales de la app — reemplaza estos mockups por tus capturas reales cuando las tengas.</p>
+  </div>
+
+  <div class="showcase">
+
+    <div class="showcase-row">
+      <div class="showcase-text">
+        <div class="showcase-tag">Home</div>
+        <h3>El color sigue a la música</h3>
+        <p>Cada portada de álbum genera su propio degradado de fondo en tiempo real. No hay dos scrolls que se vean igual — el feed se adapta a lo que estás mirando, con caché local para que cargue rápido incluso con conexión lenta.</p>
+      </div>
+      <div class="showcase-visual">
+        <div class="mock-phone">
+          <div class="mock-notch"></div>
+          <div class="mock-body mock-home">
+            <div class="cover"></div>
+            <div class="pillrow"><span class="pill">Indie</span><span class="pill">2024</span></div>
+            <div class="phone-line w60"></div>
+            <div class="phone-line w40"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="showcase-row reverse">
+      <div class="showcase-text">
+        <div class="showcase-tag">Aethra</div>
+        <h3>Le hablas, te responde con música</h3>
+        <p>Aethra entiende lo que buscas — un mood, un artista parecido, una ocasión — y arma una respuesta con álbumes reales que puedes tocar directamente desde el chat, sin salir de la conversación.</p>
+      </div>
+      <div class="showcase-visual">
+        <div class="mock-phone">
+          <div class="mock-notch"></div>
+          <div class="mock-body mock-aethra">
+            <div class="bubble bubble-user">Música para la noche</div>
+            <div class="bubble bubble-bot">
+              Aquí tienes algo tranquilo para esta noche ✨
+              <div class="mini-albums">
+                <div class="mini-album"></div><div class="mini-album"></div><div class="mini-album"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="showcase-row">
+      <div class="showcase-text">
+        <div class="showcase-tag">Comunidad</div>
+        <h3>Lo que escuchas, en conversación</h3>
+        <p>Publica un álbum con un comentario, reacciona a lo que comparten otros y sigue descubriendo a través de las publicaciones de la comunidad.</p>
+      </div>
+      <div class="showcase-visual">
+        <div class="mock-phone">
+          <div class="mock-notch"></div>
+          <div class="mock-body mock-community">
+            <div class="post">
+              <div class="post-head"><div class="avatar"></div><div class="phone-line w40" style="margin:0;"></div></div>
+              <div class="post-cover"></div>
+              <div class="post-actions"><span>♡ 24</span><span>💬 6</span></div>
+            </div>
+            <div class="post">
+              <div class="post-head"><div class="avatar"></div><div class="phone-line w40" style="margin:0;"></div></div>
+              <div class="post-cover"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="showcase-row reverse">
+      <div class="showcase-text">
+        <div class="showcase-tag">Pulse</div>
+        <h3>Tus números, sin adornos</h3>
+        <p>Conecta Spotify Premium y mira de frente tus hábitos de escucha: qué artistas dominan tu mes, tus canciones más repetidas y cuándo escuchas más.</p>
+      </div>
+      <div class="showcase-visual">
+        <div class="mock-phone">
+          <div class="mock-notch"></div>
+          <div class="mock-body mock-pulse">
+            <div class="stat-chip">Artista top <b>Arctic Monkeys</b></div>
+            <div class="stat-chip">Día más activo <b>Viernes</b></div>
+            <div class="bars">
+              <div class="bar" style="height:40%;"></div>
+              <div class="bar" style="height:70%;"></div>
+              <div class="bar" style="height:55%;"></div>
+              <div class="bar" style="height:90%;"></div>
+              <div class="bar" style="height:35%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="showcase-row">
+      <div class="showcase-text">
+        <div class="showcase-tag">Echo</div>
+        <h3>¿Reconoces la canción?</h3>
+        <p>Un preview de audio, un temporizador y cinco rondas por partida. Tres niveles de dificultad para poner a prueba qué tanto conoces tu música.</p>
+      </div>
+      <div class="showcase-visual">
+        <div class="mock-phone">
+          <div class="mock-notch"></div>
+          <div class="mock-body mock-echo">
+            <div class="timer-ring"></div>
+            <div class="waveform">
+              <div class="wave-bar" style="height:40%; animation-delay:0s;"></div>
+              <div class="wave-bar" style="height:80%; animation-delay:.1s;"></div>
+              <div class="wave-bar" style="height:50%; animation-delay:.2s;"></div>
+              <div class="wave-bar" style="height:90%; animation-delay:.3s;"></div>
+              <div class="wave-bar" style="height:35%; animation-delay:.4s;"></div>
+              <div class="wave-bar" style="height:65%; animation-delay:.5s;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="showcase-row reverse">
+      <div class="showcase-text">
+        <div class="showcase-tag">Perfil</div>
+        <h3>Tu colección, tus reglas</h3>
+        <p>Organiza tus álbumes en carpetas, califícalos con estrellas y escribe en tu diario musical semanal — disponible para todos, incluso sin Spotify conectado.</p>
+      </div>
+      <div class="showcase-visual">
+        <div class="mock-phone">
+          <div class="mock-notch"></div>
+          <div class="mock-body mock-perfil">
+            <div class="phone-line w60"></div>
+            <div class="phone-line w40"></div>
+            <div class="grid9">
+              <div></div><div></div><div></div>
+              <div></div><div></div><div></div>
+              <div></div><div></div><div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="cta-final">
+  <div class="eyebrow" style="justify-content:center;">Lista para instalar</div>
+  <h2>Tu próximo álbum favorito está a un tap.</h2>
+  <p>Descarga el APK directamente desde GitHub Releases — gratis, sin Play Store.</p>
+  <a href="https://github.com/christianbytebuddy/aether/releases/latest" class="btn btn-primary">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 3v13m0 0l-5-5m5 5l5-5M4 21h16" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Descargar Aether APK
+  </a>
+</section>
+
+<footer>
+  Aether — Proyecto de grado, Tecnología en Análisis y Desarrollo de Software, SENA.
+  <br>Código fuente en <a href="https://github.com/christianbytebuddy/aether" target="_blank">GitHub</a>.
+</footer>
+
+</body>
+</html>
