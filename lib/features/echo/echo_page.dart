@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:aether/services/spotify_service.dart';
 import 'package:aether/features/echo/echo_game_page.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 
 class EchoPage extends StatefulWidget {
   const EchoPage({super.key});
@@ -25,64 +23,12 @@ class _EchoPageState extends State<EchoPage> {
   static const _accent = Color(0xFF7B6EF6);
   static const _card = Color(0xFF111827);
 
-  // Artistas sugeridos hardcodeados con sus IDs de Spotify
-  static const _suggestedArtistIds = <Map<String, String>>[
-    {'id': '161553', 'name': 'TWICE'},
-    {'id': '178008437', 'name': 'NewJeans'},
-    {'id': '13923487', 'name': 'Stray Kids'},
-  ];
-
-  Future<void> _loadSuggested() async {
-    debugPrint('LOAD SUGGESTED INICIADO');
-    try {
-      final results = await Future.wait(
-        _suggestedArtistIds.map((entry) async {
-          debugPrint('LLAMANDO DEEZER ID: ${entry['id']}');
-          final res = await http
-              .get(Uri.parse('https://api.deezer.com/artist/${entry['id']}'))
-              .timeout(const Duration(seconds: 10));
-          debugPrint('RESPUESTA DEEZER [${entry['id']}]: ${res.statusCode}');
-          debugPrint(
-            'DEEZER ARTIST STATUS [${entry['id']}]: ${res.statusCode} | body: ${res.body.substring(0, res.body.length.clamp(0, 200))}',
-          );
-          debugPrint(
-            'DEEZER ARTIST [${entry['id']}] STATUS: ${res.statusCode}',
-          );
-          debugPrint(
-            'DEEZER ARTIST [${entry['id']}] BODY: ${res.body.substring(0, res.body.length.clamp(0, 300))}',
-          );
-          if (res.statusCode != 200) return null;
-          final a = jsonDecode(res.body) as Map<String, dynamic>;
-          return {
-            'id': a['id'].toString(),
-            'name': a['name'] as String? ?? entry['name'] ?? '',
-            'deezerArtistId': a['id'].toString(),
-            'imageUrl':
-                a['picture_xl'] as String? ??
-                a['picture_big'] as String? ??
-                a['picture'] as String? ??
-                '',
-          };
-        }),
-      );
-      if (mounted)
-        setState(() {
-          _suggestedArtists = results
-              .whereType<Map<String, dynamic>>()
-              .toList();
-          _isLoadingSuggested = false;
-        });
-    } catch (e, stack) {
-      debugPrint('LOAD SUGGESTED ERROR: $e');
-      debugPrint('STACK: $stack');
-      if (mounted) setState(() => _isLoadingSuggested = false);
-    }
-  }
+  // Artistas sugeridos — ahora solo nombre, sin IDs de Deezer
+  static const _suggestedNames = ['TWICE', 'NewJeans', 'Stray Kids'];
 
   @override
   void initState() {
     super.initState();
-    debugPrint('ECHO PAGE INIT STATE');
     _loadSuggested();
   }
 
@@ -90,6 +36,39 @@ class _EchoPageState extends State<EchoPage> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadSuggested() async {
+    try {
+      final results = await Future.wait(
+        _suggestedNames.map((name) async {
+          final found = await _spotify.searchArtists(name);
+          if (found.isEmpty) return null;
+          // Tomamos el primer resultado exacto o el primero disponible
+          final match = found.firstWhere(
+            (a) => (a['name'] as String).toLowerCase() == name.toLowerCase(),
+            orElse: () => found.first,
+          );
+          return <String, dynamic>{
+            'id': match['id'],
+            'name': match['name'],
+            'imageUrl': match['imageUrl'],
+            'deezerArtistId': '',
+          };
+        }),
+      );
+
+      if (mounted) {
+        setState(() {
+          _suggestedArtists = results
+              .whereType<Map<String, dynamic>>()
+              .toList();
+          _isLoadingSuggested = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingSuggested = false);
+    }
   }
 
   Future<void> _search(String query) async {
@@ -100,21 +79,36 @@ class _EchoPageState extends State<EchoPage> {
     if (mounted) setState(() => _isSearching = true);
     try {
       final results = await _spotify.searchArtists(query.trim());
-      if (mounted)
+      if (mounted) {
         setState(() {
           _searchResults = results;
           _isSearching = false;
         });
+      }
     } catch (_) {
       if (mounted) setState(() => _isSearching = false);
     }
   }
 
   void _startGame(Map<String, dynamic> artist) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => EchoGamePage(artist: artist, spotify: _spotify),
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _DifficultySheet(
+        artist: artist,
+        onSelect: (seconds) {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => EchoGamePage(
+                artist: artist,
+                spotify: _spotify,
+                secondsPerRound: seconds,
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -130,8 +124,6 @@ class _EchoPageState extends State<EchoPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 24),
-
-              // ── Header ─────────────────────────────────────────────────
               Row(
                 children: [
                   Container(
@@ -168,10 +160,7 @@ class _EchoPageState extends State<EchoPage> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 28),
-
-              // ── Buscador ───────────────────────────────────────────────
               TextField(
                 controller: _searchController,
                 style: const TextStyle(color: Colors.white, fontSize: 14),
@@ -196,10 +185,7 @@ class _EchoPageState extends State<EchoPage> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 28),
-
-              // ── Contenido ──────────────────────────────────────────────
               Expanded(
                 child: _searchController.text.isNotEmpty
                     ? _buildSearchResults()
@@ -262,7 +248,7 @@ class _EchoPageState extends State<EchoPage> {
     }
     return ListView.separated(
       itemCount: _searchResults.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (_, i) {
         final artist = _searchResults[i];
         return GestureDetector(
@@ -282,9 +268,9 @@ class _EchoPageState extends State<EchoPage> {
                     width: 52,
                     height: 52,
                     fit: BoxFit.cover,
-                    placeholder: (_, _) =>
+                    placeholder: (_, __) =>
                         const ColoredBox(color: Color(0xFF1C1F2E)),
-                    errorWidget: (_, _, _) =>
+                    errorWidget: (_, __, ___) =>
                         const ColoredBox(color: Color(0xFF1C1F2E)),
                   ),
                 ),
@@ -308,6 +294,8 @@ class _EchoPageState extends State<EchoPage> {
     );
   }
 }
+
+// ── Artista tile ──────────────────────────────────────────────────────────────
 
 class _ArtistTile extends StatelessWidget {
   final Map<String, dynamic> artist;
@@ -354,6 +342,135 @@ class _ArtistTile extends StatelessWidget {
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Modal de dificultad ───────────────────────────────────────────────────────
+
+class _DifficultySheet extends StatelessWidget {
+  final Map<String, dynamic> artist;
+  final void Function(int seconds) onSelect;
+
+  const _DifficultySheet({required this.artist, required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+      decoration: const BoxDecoration(
+        color: Color(0xFF111827),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            artist['name'] as String? ?? '',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Elige la dificultad',
+            style: TextStyle(color: Colors.white54, fontSize: 14),
+          ),
+          const SizedBox(height: 24),
+          _DifficultyOption(
+            label: 'Fácil',
+            description: '10 segundos por canción',
+            emoji: '😌',
+            color: Colors.greenAccent,
+            onTap: () => onSelect(10),
+          ),
+          const SizedBox(height: 12),
+          _DifficultyOption(
+            label: 'Intermedio',
+            description: '8 segundos por canción',
+            emoji: '🎯',
+            color: const Color(0xFF7B6EF6),
+            onTap: () => onSelect(8),
+          ),
+          const SizedBox(height: 12),
+          _DifficultyOption(
+            label: 'Difícil',
+            description: '5 segundos por canción',
+            emoji: '🔥',
+            color: Colors.redAccent,
+            onTap: () => onSelect(5),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DifficultyOption extends StatelessWidget {
+  final String label;
+  final String description;
+  final String emoji;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _DifficultyOption({
+    required this.label,
+    required this.description,
+    required this.emoji,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 24)),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    description,
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: color, size: 20),
           ],
         ),
       ),

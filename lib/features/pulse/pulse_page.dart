@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:aether/services/spotify_auth_service.dart';
+import 'package:aether/services/firestore_service.dart';
+import 'package:aether/models/album_model.dart';
 
 class PulsePage extends StatefulWidget {
   const PulsePage({super.key});
@@ -16,6 +18,7 @@ class _PulsePageState extends State<PulsePage>
   bool get wantKeepAlive => true;
 
   final _spotifyAuth = SpotifyAuthService();
+  final _firestore = FirestoreService();
 
   bool _spotifyConnected = false;
   bool _loading = false;
@@ -102,20 +105,6 @@ class _PulsePageState extends State<PulsePage>
     }
     _cachedArtistMins = map;
     return map;
-  }
-
-  double _artistPercent(String artist) {
-    final top3Names = _topArtists
-        .take(3)
-        .map((a) => a['name'] as String)
-        .toList();
-    final map = _artistMinutes();
-    final top3Total = top3Names.fold<int>(
-      0,
-      (sum, name) => sum + (map[name] ?? 0),
-    );
-    if (top3Total == 0) return 0;
-    return (map[artist] ?? 0) / top3Total;
   }
 
   String _topDay() {
@@ -313,7 +302,7 @@ class _PulsePageState extends State<PulsePage>
                   .toList()
                   .asMap()
                   .entries
-                  .map((entry) => _buildTrackTile(entry.key + 1, entry.value)),
+                  .map((e) => _buildTrackTile(e.key + 1, e.value)),
               const SizedBox(height: 20),
               _buildSectionTitle('Top Artistas', Icons.mic_none_outlined),
               const SizedBox(height: 10),
@@ -338,12 +327,15 @@ class _PulsePageState extends State<PulsePage>
                 const SizedBox(height: 20),
               ],
               _buildDayCard(),
+              const SizedBox(height: 40),
             ]),
           ),
         ),
       ],
     );
   }
+
+  // ── Widgets ───────────────────────────────────────────────────────────────
 
   Widget _buildTimeCard(int totalMinutes) {
     return Container(
@@ -610,7 +602,6 @@ class _PulsePageState extends State<PulsePage>
     );
     final othersMs = total - top3Total;
     final othersPercent = total > 0 ? othersMs / total : 0.0;
-
     final colors = [_accent, _pink, Colors.orangeAccent, Colors.white38];
     final allNames = [...artists, if (othersPercent > 0.01) 'Otros'];
 

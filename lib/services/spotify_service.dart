@@ -1,23 +1,29 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:aether/models/album_model.dart';
+import 'package:flutter/foundation.dart';
 
 class SpotifyService {
+  // ── Singleton ─────────────────────────────────────────────────────────────
+  static final SpotifyService _instance = SpotifyService._internal();
+  factory SpotifyService() => _instance;
+  SpotifyService._internal();
+  // ── fin singleton ──────────────────────────────────────────────────────────
   static const _clientId = String.fromEnvironment('SPOTIFY_CLIENT_ID');
   static const _clientSecret = String.fromEnvironment('SPOTIFY_CLIENT_SECRET');
   static const _authUrl = 'https://accounts.spotify.com/api/token';
   static const _apiUrl = 'https://api.spotify.com/v1';
+  static const _itunesUrl = 'https://itunes.apple.com';
 
   String? _accessToken;
   DateTime? _tokenExpiry;
 
   static const List<String> _curatedAlbumIds = [
-    '5052Ip89wdW8EGdpjEpNeq', // formula of love
-    '0EhZEM4RRz0yioTgucDhJq', // how sweet
-    '3RQQmkQEvNCY4prGKE6oc5', // un verano sin ti
-    '2xkZV2Hl1Omi8rk2D7t5lN', // the new abnormal
-    '6OXg149IkmbgW7zfzbwgS2', // the red summer
-    '1vWMw6pu3err6qqZzI3RhH', // ruby
+    '0EhZEM4RRz0yioTgucDhJq',
+    '3RQQmkQEvNCY4prGKE6oc5',
+    '2xkZV2Hl1Omi8rk2D7t5lN',
+    '6OXg149IkmbgW7zfzbwgS2',
+    '1vWMw6pu3err6qqZzI3RhH',
   ];
 
   Future<void> _ensureToken() async {
@@ -153,7 +159,15 @@ class SpotifyService {
       headers: {'Authorization': 'Bearer $_accessToken'},
     );
 
+    // TEMPORAL
+    debugPrint('searchAlbums "$query" → status: ${response.statusCode}');
+    if (response.statusCode != 200) {
+      debugPrint('Body error: ${response.body}');
+    }
+    // FIN TEMPORAL
+
     if (response.statusCode != 200) return [];
+    // ... resto igual
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     final items = (data['albums']?['items'] as List<dynamic>?) ?? [];
@@ -163,16 +177,94 @@ class SpotifyService {
         .toList();
   }
 
-  Future<String> getDeezerTrackPreview(String trackId) async {
-    final res = await http.get(
-      Uri.parse('https://api.deezer.com/track/$trackId'),
+  // ── iTunes — reemplaza todo lo que era Deezer ─────────────────────────────
+
+  /// Busca tracks de un artista en iTunes y devuelve los que tienen preview.
+  /// Devuelve hasta [limit] tracks con previewUrl estable (30 s, nunca expira).
+  Future<List<Map<String, dynamic>>> getArtistTopTracks(
+    String artistName, {
+    String? deezerArtistId, // parámetro mantenido por compatibilidad, ignorado
+  }) async {
+    final uri = Uri.parse(
+      '$_itunesUrl/search'
+      '?term=${Uri.encodeComponent(artistName)}'
+      '&media=music'
+      '&entity=song'
+      '&limit=50'
+      '&lang=en_us',
     );
-    if (res.statusCode != 200) return '';
+
+    final res = await http.get(uri).timeout(const Duration(seconds: 15));
+
+    if (res.statusCode != 200) return [];
+
     final data = jsonDecode(res.body) as Map<String, dynamic>;
-    return data['preview'] as String? ?? '';
+    final results = (data['results'] as List<dynamic>?) ?? [];
+
+    // Filtramos solo los tracks que realmente pertenecen al artista buscado
+    // y que tienen preview disponible
+    final tracks = results
+        .cast<Map<String, dynamic>>()
+        .where((t) {
+          final artist = (t['artistName'] as String? ?? '').toLowerCase();
+          final preview = t['previewUrl'] as String? ?? '';
+          return artist.contains(artistName.toLowerCase()) &&
+              preview.isNotEmpty;
+        })
+        .map((t) {
+          final imageUrl = _itunesArtwork(t['artworkUrl100'] as String? ?? '');
+          return <String, dynamic>{
+            'id': t['trackId'].toString(),
+            'name': t['trackName'] as String? ?? '',
+            'previewUrl': t['previewUrl'] as String? ?? '',
+            'imageUrl': imageUrl,
+            // Mantenemos la clave por si algo en el código la lee
+            'deezerTrackId': '',
+          };
+        })
+        .toList();
+
+    // Eliminamos duplicados por nombre de canción
+    final seen = <String>{};
+    final unique = tracks.where((t) => seen.add(t['name'] as String)).toList();
+
+    return unique;
   }
 
-  // ── ECHO ──────────────────────────────────────────────────────────────────
+  /// Obtiene un preview fresco de iTunes por trackId.
+  /// Reemplaza getDeezerTrackPreview — la URL de iTunes NO expira,
+  /// pero la mantenemos como método por si echo_game_page la llama.
+  Future<String> getDeezerTrackPreview(String trackId) async {
+    // Si el trackId está vacío (artistas buscados sin deezerArtistId),
+    // no hay nada que buscar.
+    if (trackId.isEmpty) return '';
+
+    final uri = Uri.parse('$_itunesUrl/lookup?id=$trackId&entity=song');
+
+    final res = await http.get(uri).timeout(const Duration(seconds: 10));
+
+    if (res.statusCode != 200) return '';
+
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    final results = (data['results'] as List<dynamic>?) ?? [];
+    if (results.length < 2) return '';
+
+    // results[0] es la colección/álbum, results[1..] son los tracks
+    for (final r in results.skip(1)) {
+      final preview =
+          (r as Map<String, dynamic>)['previewUrl'] as String? ?? '';
+      if (preview.isNotEmpty) return preview;
+    }
+    return '';
+  }
+
+  /// Convierte la URL de artwork de 100px a 600px para mejor calidad.
+  String _itunesArtwork(String url100) {
+    if (url100.isEmpty) return '';
+    return url100.replaceAll('100x100bb', '600x600bb');
+  }
+
+  // ── ECHO — búsqueda de artistas (sigue usando Spotify para imágenes) ───────
 
   Future<List<Map<String, dynamic>>> searchArtists(String query) async {
     await _ensureToken();
@@ -196,102 +288,130 @@ class SpotifyService {
 
     return items.map((item) {
       final images = (item['images'] as List<dynamic>?) ?? [];
-      return {
+      return <String, dynamic>{
         'id': item['id'] as String? ?? '',
         'name': item['name'] as String? ?? '',
         'imageUrl': images.isNotEmpty
             ? (images[0]['url'] as String? ?? '')
             : '',
+        // deezerArtistId ya no se usa — se deja vacío para no romper nada
+        'deezerArtistId': '',
       };
     }).toList();
   }
 
-  Future<List<Map<String, dynamic>>> getArtistTopTracks(
-    String artistName, {
-    String? deezerArtistId,
+  Future<AlbumModel> getAlbumById(String albumId) => getAlbum(albumId);
+
+  Future<List<AlbumModel>> getPersonalizedFeed({
+    required List<String> genres,
+    required List<String> artists,
+    int limit = 20,
   }) async {
-    String resolvedId;
-    String artistImageUrl = '';
+    await _ensureToken();
 
-    if (deezerArtistId != null && deezerArtistId.isNotEmpty) {
-      resolvedId = deezerArtistId;
+    final queries = <String>[];
 
-      final artistRes = await http.get(
-        Uri.parse('https://api.deezer.com/artist/$resolvedId'),
-      );
-      if (artistRes.statusCode == 200) {
-        final artistData = jsonDecode(artistRes.body) as Map<String, dynamic>;
-        artistImageUrl =
-            artistData['picture_xl'] as String? ??
-            artistData['picture_big'] as String? ??
-            artistData['picture'] as String? ??
-            '';
-      }
-    } else {
-      final searchRes = await http.get(
-        Uri.parse(
-          'https://api.deezer.com/search/artist?q=${Uri.encodeComponent(artistName)}&limit=10',
-        ),
-      );
-      if (searchRes.statusCode != 200) return [];
-
-      final searchData = jsonDecode(searchRes.body) as Map<String, dynamic>;
-      final artists = (searchData['data'] as List<dynamic>?) ?? [];
-      if (artists.isEmpty) return [];
-
-      final exactMatches = artists
-          .where(
-            (a) =>
-                (a['name'] as String).toLowerCase() == artistName.toLowerCase(),
-          )
-          .toList();
-
-      final candidates = exactMatches.isNotEmpty ? exactMatches : artists;
-      final match = candidates.reduce((a, b) {
-        final fansA = (a['nb_fan'] as int?) ?? 0;
-        final fansB = (b['nb_fan'] as int?) ?? 0;
-        return fansA >= fansB ? a : b;
-      });
-
-      resolvedId = match['id'].toString();
-      artistImageUrl =
-          match['picture_xl'] as String? ??
-          match['picture_big'] as String? ??
-          match['picture'] as String? ??
-          '';
+    for (final genre in genres.take(3)) {
+      queries.add(genre);
+    }
+    for (final artist in artists.take(3)) {
+      queries.add(artist);
     }
 
-    final tracksRes = await http.get(
-      Uri.parse('https://api.deezer.com/artist/$resolvedId/top?limit=30'),
+    if (queries.isEmpty) return getFeed(limit: limit);
+
+    final results = await Future.wait(
+      queries.map((q) async {
+        try {
+          final uri = Uri.parse(
+            '$_apiUrl/search'
+            '?q=${Uri.encodeComponent(q)}'
+            '&type=album'
+            '&limit=10',
+          );
+          final response = await http.get(
+            uri,
+            headers: {'Authorization': 'Bearer $_accessToken'},
+          );
+          if (response.statusCode != 200) return <AlbumModel>[];
+
+          final data = jsonDecode(response.body) as Map<String, dynamic>;
+          final items = (data['albums']?['items'] as List<dynamic>?) ?? [];
+
+          final filtered = items.where((item) {
+            final totalTracks = item['total_tracks'] as int? ?? 0;
+            return totalTracks >= 6;
+          }).toList();
+
+          final albums = await Future.wait(
+            filtered.map((item) async {
+              try {
+                return await getAlbum(item['id'] as String);
+              } catch (_) {
+                return null;
+              }
+            }),
+          );
+
+          return albums
+              .whereType<AlbumModel>()
+              .where((a) => a.imageUrl.isNotEmpty && a.totalTracks >= 6)
+              .toList();
+        } catch (_) {
+          return <AlbumModel>[];
+        }
+      }),
     );
-    if (tracksRes.statusCode != 200) return [];
 
-    final tracksData = jsonDecode(tracksRes.body) as Map<String, dynamic>;
-    final tracks = (tracksData['data'] as List<dynamic>?) ?? [];
+    final seen = <String>{};
+    final all = <AlbumModel>[];
+    for (final list in results) {
+      for (final album in list) {
+        if (seen.add(album.id)) all.add(album);
+      }
+    }
 
-    return tracks
-        .map((t) {
-          final album = t['album'] as Map<String, dynamic>? ?? {};
-          final imageUrl =
-              album['cover_xl'] as String? ??
-              album['cover_big'] as String? ??
-              album['cover_medium'] as String? ??
-              album['cover'] as String? ??
-              artistImageUrl;
+    if (all.isEmpty) return getFeed(limit: limit);
 
-          final previewUrl = t['preview'] as String? ?? '';
-
-          return {
-            'id': t['id'].toString(),
-            'name': t['title'] as String? ?? '',
-            'deezerTrackId': t['id'].toString(),
-            'previewUrl': previewUrl,
-            'imageUrl': imageUrl,
-          };
-        })
-        .where((t) => (t['previewUrl'] as String).isNotEmpty)
-        .toList();
+    all.shuffle();
+    return all.take(limit).toList();
   }
 
-  Future<AlbumModel> getAlbumById(String albumId) => getAlbum(albumId);
+  /// Busca los previews de un álbum en iTunes por nombre de álbum y artista.
+  /// Devuelve un mapa de {nombreCanción → previewUrl}.
+  Future<Map<String, String>> getAlbumPreviewsFromItunes({
+    required String albumName,
+    required String artistName,
+  }) async {
+    final uri = Uri.parse(
+      '$_itunesUrl/search'
+      '?term=${Uri.encodeComponent('$artistName $albumName')}'
+      '&media=music'
+      '&entity=song'
+      '&limit=50'
+      '&lang=en_us',
+    );
+
+    try {
+      final res = await http.get(uri).timeout(const Duration(seconds: 15));
+      if (res.statusCode != 200) return {};
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final results = (data['results'] as List<dynamic>?) ?? [];
+
+      final previews = <String, String>{};
+      for (final r in results.cast<Map<String, dynamic>>()) {
+        final trackName = (r['trackName'] as String? ?? '')
+            .toLowerCase()
+            .trim();
+        final preview = r['previewUrl'] as String? ?? '';
+        if (trackName.isNotEmpty && preview.isNotEmpty) {
+          previews[trackName] = preview;
+        }
+      }
+      return previews;
+    } catch (_) {
+      return {};
+    }
+  }
 }

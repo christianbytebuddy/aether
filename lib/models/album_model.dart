@@ -1,3 +1,8 @@
+import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:aether/models/album_model.dart';
+import 'package:aether/services/firestore_service.dart';
+
 class AlbumModel {
   final String id;
   final String name;
@@ -84,6 +89,7 @@ class AlbumModel {
             'name': t.name,
             'trackNumber': t.trackNumber,
             'durationMs': t.durationMs,
+            'previewUrl': t.previewUrl, // ← nuevo
           },
         )
         .toList(),
@@ -107,6 +113,7 @@ class AlbumModel {
               name: t['name'] as String,
               trackNumber: t['trackNumber'] as int,
               durationMs: t['durationMs'] as int,
+              previewUrl: t['previewUrl'] as String? ?? '', // ← nuevo
             ),
           )
           .toList(),
@@ -119,12 +126,14 @@ class TrackModel {
   final String name;
   final int trackNumber;
   final int durationMs;
+  final String previewUrl; // ← nuevo
 
   TrackModel({
     required this.id,
     required this.name,
     required this.trackNumber,
     required this.durationMs,
+    this.previewUrl = '', // ← nuevo, opcional para no romper código existente
   });
 
   String get durationFormatted {
@@ -139,6 +148,7 @@ class TrackModel {
       name: json['name'] as String? ?? '',
       trackNumber: json['track_number'] as int? ?? 0,
       durationMs: json['duration_ms'] as int? ?? 0,
+      previewUrl: json['previewUrl'] as String? ?? '', // ← nuevo
     );
   }
 }

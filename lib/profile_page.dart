@@ -9,6 +9,9 @@ import 'package:aether/services/spotify_auth_service.dart';
 import 'package:aether/models/album_model.dart';
 import 'package:aether/features/home/folder_detail_page.dart';
 import 'dart:convert';
+import 'package:aether/features/home/album_detail_sheet.dart';
+import 'package:aether/features/diary/diary_entry_sheet.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -235,9 +238,7 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       final doc = await FirestoreService().getUserDoc(uid);
       final url = doc?['photoBase64'] as String?;
-      if (url != null && mounted) {
-        setState(() => _photoUrl = url);
-      }
+      if (url != null && mounted) setState(() => _photoUrl = url);
     } catch (e) {
       debugPrint('ERROR cargando foto: $e');
     }
@@ -252,15 +253,12 @@ class _ProfilePageState extends State<ProfilePage> {
       imageQuality: 70,
     );
     if (picked == null) return;
-
     if (mounted) setState(() => _uploadingPhoto = true);
     try {
       final bytes = await picked.readAsBytes();
       final base64Str = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-
       final uid = FirebaseAuth.instance.currentUser!.uid;
       await FirestoreService().saveUserPhoto(uid, base64Str);
-
       if (mounted) setState(() => _photoUrl = base64Str);
     } catch (e) {
       debugPrint('ERROR FOTO: $e');
@@ -395,9 +393,7 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  Future<void> _signOut() async {
-    await _auth.signOut();
-  }
+  Future<void> _signOut() async => await _auth.signOut();
 
   String _topSong() {
     if (_topTracks.isEmpty) return '-';
@@ -455,6 +451,8 @@ class _ProfilePageState extends State<ProfilePage> {
                     const SizedBox(height: 28),
                     _buildLikedAlbumsSection(),
                     const SizedBox(height: 28),
+                    _buildDiarySection(),
+                    const SizedBox(height: 28),
                     _buildStatsSection(),
                     const SizedBox(height: 40),
                   ],
@@ -508,155 +506,113 @@ class _ProfilePageState extends State<ProfilePage> {
         color: _card,
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              GestureDetector(
-                onTap: _uploadingPhoto ? null : _pickAndUploadPhoto,
-                child: Stack(
-                  children: [
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF7B6EF6), Color(0xFF4A3FC4)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                      child: _uploadingPhoto
-                          ? const Center(
-                              child: SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            )
-                          : _photoUrl != null
-                          ? ClipOval(
-                              child: _photoUrl!.startsWith('data:')
-                                  ? Image.memory(
-                                      base64Decode(_photoUrl!.split(',')[1]),
-                                      width: 64,
-                                      height: 64,
-                                      fit: BoxFit.cover,
-                                    )
-                                  : CachedNetworkImage(
-                                      imageUrl: _photoUrl!,
-                                      width: 64,
-                                      height: 64,
-                                      fit: BoxFit.cover,
-                                    ),
-                            )
-                          : Center(
-                              child: Text(
-                                username.isNotEmpty
-                                    ? username[0].toUpperCase()
-                                    : 'A',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+          GestureDetector(
+            onTap: _uploadingPhoto ? null : _pickAndUploadPhoto,
+            child: Stack(
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF7B6EF6), Color(0xFF4A3FC4)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: _uploadingPhoto
+                      ? const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
                             ),
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          color: _accent,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: _card, width: 2),
+                          ),
+                        )
+                      : _photoUrl != null
+                      ? ClipOval(
+                          child: _photoUrl!.startsWith('data:')
+                              ? Image.memory(
+                                  base64Decode(_photoUrl!.split(',')[1]),
+                                  width: 64,
+                                  height: 64,
+                                  fit: BoxFit.cover,
+                                )
+                              : CachedNetworkImage(
+                                  imageUrl: _photoUrl!,
+                                  width: 64,
+                                  height: 64,
+                                  fit: BoxFit.cover,
+                                ),
+                        )
+                      : Center(
+                          child: Text(
+                            username.isNotEmpty
+                                ? username[0].toUpperCase()
+                                : 'A',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 26,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ),
-                        child: const Icon(
-                          Icons.camera_alt,
-                          color: Colors.white,
-                          size: 10,
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      username,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: _accent,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: _card, width: 2),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      email,
-                      style: const TextStyle(
-                        color: Colors.white38,
-                        fontSize: 12,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    child: const Icon(
+                      Icons.camera_alt,
+                      color: Colors.white,
+                      size: 10,
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 20),
-          const Divider(color: Color(0xFF1E2236), height: 1),
-          const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildStat('0', 'SEGUIDORES'),
-              Container(width: 1, height: 32, color: const Color(0xFF1E2236)),
-              _buildStat('0', 'SIGUIENDO'),
-            ],
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  username,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  email,
+                  style: const TextStyle(color: Colors.white38, fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStat(String value, String label) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white38,
-            fontSize: 10,
-            letterSpacing: 0.8,
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── Sección Mi Biblioteca ─────────────────────────────────────────────────
+  // ── Biblioteca ────────────────────────────────────────────────────────────
 
   Widget _buildLibrarySection() {
     return Column(
@@ -912,7 +868,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // ── Sección Álbumes Favoritos ─────────────────────────────────────────────
+  // ── Álbumes Favoritos ─────────────────────────────────────────────────────
 
   Widget _buildLikedAlbumsSection() {
     return Column(
@@ -960,21 +916,371 @@ class _ProfilePageState extends State<ProfilePage> {
             itemCount: _likedAlbums.length,
             itemBuilder: (_, i) {
               final album = _likedAlbums[i];
-              return ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: CachedNetworkImage(
-                  imageUrl: album.imageUrl,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(color: _surface),
-                  errorWidget: (_, __, ___) => Container(
-                    color: _surface,
-                    child: const Icon(Icons.album, color: Colors.white12),
+              return GestureDetector(
+                onTap: () => showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => AlbumDetailSheet(
+                    album: album,
+                    firestoreService: _firestore,
+                    bgColor: const Color(0xFF1C1F2E),
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: CachedNetworkImage(
+                    imageUrl: album.imageUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => Container(color: _surface),
+                    errorWidget: (_, __, ___) => Container(
+                      color: _surface,
+                      child: const Icon(Icons.album, color: Colors.white12),
+                    ),
                   ),
                 ),
               );
             },
           ),
       ],
+    );
+  }
+
+  // ── Diario Musical ────────────────────────────────────────────────────────
+
+  Widget _buildDiarySection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.menu_book_rounded, color: Colors.white54, size: 16),
+                SizedBox(width: 8),
+                Text(
+                  'Diario musical',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            GestureDetector(
+              onTap: () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) =>
+                    AddDiaryEntrySheet(firestoreService: _firestore),
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: _accent,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.add, color: Colors.white, size: 16),
+                    SizedBox(width: 4),
+                    Text(
+                      'Agregar',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        StreamBuilder<List<Map<String, dynamic>>>(
+          stream: _firestore.diaryStream(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: CircularProgressIndicator(
+                    color: _accent,
+                    strokeWidth: 2,
+                  ),
+                ),
+              );
+            }
+            final entries = snapshot.data ?? [];
+            if (entries.isEmpty) {
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 32),
+                decoration: BoxDecoration(
+                  color: _card,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Column(
+                  children: [
+                    Icon(
+                      Icons.menu_book_rounded,
+                      color: Colors.white12,
+                      size: 36,
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      'Aún no tienes entradas',
+                      style: TextStyle(color: Colors.white24, fontSize: 13),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Toca + Agregar para registrar\nun álbum que estás escuchando',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white12, fontSize: 12),
+                    ),
+                  ],
+                ),
+              );
+            }
+            final grouped = <String, List<Map<String, dynamic>>>{};
+            for (final entry in entries) {
+              final ts = entry['createdAt'];
+              final date = ts is Timestamp ? ts.toDate() : DateTime.now();
+              grouped.putIfAbsent(_weekLabel(date), () => []).add(entry);
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: grouped.entries.map((group) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8, top: 4),
+                      child: Text(
+                        group.key,
+                        style: const TextStyle(
+                          color: _accent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                    ...group.value.map((e) => _buildDiaryEntry(e)),
+                    const SizedBox(height: 12),
+                  ],
+                );
+              }).toList(),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  String _weekLabel(DateTime date) {
+    final now = DateTime.now();
+    final startOfThisWeek = now.subtract(Duration(days: now.weekday - 1));
+    final startOfLastWeek = startOfThisWeek.subtract(const Duration(days: 7));
+    final d = DateTime(date.year, date.month, date.day);
+    final thisWeekStart = DateTime(
+      startOfThisWeek.year,
+      startOfThisWeek.month,
+      startOfThisWeek.day,
+    );
+    final lastWeekStart = DateTime(
+      startOfLastWeek.year,
+      startOfLastWeek.month,
+      startOfLastWeek.day,
+    );
+    if (!d.isBefore(thisWeekStart)) return 'Esta semana';
+    if (!d.isBefore(lastWeekStart)) return 'Semana pasada';
+    const months = [
+      'ene',
+      'feb',
+      'mar',
+      'abr',
+      'may',
+      'jun',
+      'jul',
+      'ago',
+      'sep',
+      'oct',
+      'nov',
+      'dic',
+    ];
+    return 'Semana del ${date.day} ${months[date.month - 1]}';
+  }
+
+  Widget _buildDiaryEntry(Map<String, dynamic> entry) {
+    final id = entry['id'] as String;
+    final albumName = entry['albumName'] as String? ?? '';
+    final albumArtist = entry['albumArtist'] as String? ?? '';
+    final albumImage = entry['albumImage'] as String? ?? '';
+    final note = entry['note'] as String? ?? '';
+    final ts = entry['createdAt'];
+    final date = ts is Timestamp ? ts.toDate() : DateTime.now();
+    const months = [
+      'ene',
+      'feb',
+      'mar',
+      'abr',
+      'may',
+      'jun',
+      'jul',
+      'ago',
+      'sep',
+      'oct',
+      'nov',
+      'dic',
+    ];
+    final dateStr = '${date.day} ${months[date.month - 1]}, ${date.year}';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: CachedNetworkImage(
+                imageUrl: albumImage,
+                width: 56,
+                height: 56,
+                fit: BoxFit.cover,
+                placeholder: (_, __) =>
+                    const ColoredBox(color: Color(0xFF1C1F2E)),
+                errorWidget: (_, __, ___) =>
+                    const ColoredBox(color: Color(0xFF1C1F2E)),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          albumName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        dateStr,
+                        style: const TextStyle(
+                          color: Colors.white24,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    albumArtist,
+                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (note.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.04),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white10),
+                      ),
+                      child: Text(
+                        note,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => _confirmDeleteDiary(id),
+              child: const Icon(
+                Icons.delete_outline,
+                color: Colors.white24,
+                size: 18,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteDiary(String entryId) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: _card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Eliminar entrada',
+          style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
+        content: const Text(
+          '¿Eliminar esta entrada del diario?',
+          style: TextStyle(color: Colors.white60, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'Cancelar',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _firestore.deleteDiaryEntry(entryId);
+            },
+            child: const Text(
+              'Eliminar',
+              style: TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

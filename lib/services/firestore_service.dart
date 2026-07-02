@@ -52,6 +52,28 @@ class FirestoreService {
         );
   }
 
+  Future<List<Map<String, dynamic>>> searchPosts(String query) async {
+    final snap = await _posts
+        .orderBy('createdAt', descending: true)
+        .limit(50)
+        .get();
+
+    final lower = query.toLowerCase();
+
+    return snap.docs
+        .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
+        .where((post) {
+          final title = (post['title'] as String? ?? '').toLowerCase();
+          final description = (post['description'] as String? ?? '')
+              .toLowerCase();
+          final username = (post['username'] as String? ?? '').toLowerCase();
+          return title.contains(lower) ||
+              description.contains(lower) ||
+              username.contains(lower);
+        })
+        .toList();
+  }
+
   // ── RATINGS ───────────────────────────────────────────────────────────────
 
   CollectionReference get _ratings =>
@@ -240,10 +262,22 @@ class FirestoreService {
     required String postId,
     required String title,
     required String description,
+    required List<AlbumModel> albums,
   }) async {
     await _posts.doc(postId).update({
       'title': title,
       'description': description,
+      'albums': albums
+          .map(
+            (a) => <String, dynamic>{
+              'id': a.id,
+              'name': a.name,
+              'artist': a.artist,
+              'imageUrl': a.imageUrl,
+            },
+          )
+          .toList(),
+      'updatedAt': FieldValue.serverTimestamp(),
     });
   }
 
@@ -272,6 +306,38 @@ class FirestoreService {
     await _db.collection('users').doc(uid).set({
       'photoBase64': base64Str,
     }, SetOptions(merge: true));
+  }
+
+  // ── PREFERENCIAS DE USUARIO ───────────────────────────────────────────────
+
+  Future<bool> hasPreferences() async {
+    final doc = await _db.collection('users').doc(_uid).get();
+    if (!doc.exists) return false;
+    final data = doc.data() as Map<String, dynamic>?;
+    if (data == null) return false;
+    final genres = data['preferredGenres'] as List?;
+    return genres != null && genres.isNotEmpty;
+  }
+
+  Future<void> savePreferences({
+    required List<String> genres,
+    required List<String> artistNames,
+  }) async {
+    await _db.collection('users').doc(_uid).set({
+      'preferredGenres': genres,
+      'preferredArtists': artistNames,
+      'preferencesUpdatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<Map<String, dynamic>> getPreferences() async {
+    final doc = await _db.collection('users').doc(_uid).get();
+    if (!doc.exists) return {'genres': [], 'artists': []};
+    final data = doc.data() as Map<String, dynamic>? ?? {};
+    return {
+      'genres': List<String>.from(data['preferredGenres'] as List? ?? []),
+      'artists': List<String>.from(data['preferredArtists'] as List? ?? []),
+    };
   }
 
   // ── Helpers privados ──────────────────────────────────────────────────────
@@ -312,6 +378,49 @@ class FirestoreService {
     return _posts
         .orderBy('createdAt', descending: true)
         .limit(30)
+        .snapshots()
+        .map((snap) {
+          final docs = snap.docs
+              .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
+              .toList();
+
+          // Saca el pinneado si existe
+          final pinned = docs.where((p) => p['pinned'] == true).toList();
+          final rest = docs.where((p) => p['pinned'] != true).toList();
+
+          // Pinneado siempre primero, el resto en orden normal
+          return [...pinned, ...rest];
+        });
+  }
+  // ── DIARIO MUSICAL ────────────────────────────────────────────────────────
+
+  CollectionReference get _diary =>
+      _db.collection('users').doc(_uid).collection('diary');
+
+  Future<void> addDiaryEntry({
+    required String albumId,
+    required String albumName,
+    required String albumArtist,
+    required String albumImage,
+    required String note,
+  }) async {
+    await _diary.add({
+      'albumId': albumId,
+      'albumName': albumName,
+      'albumArtist': albumArtist,
+      'albumImage': albumImage,
+      'note': note,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> deleteDiaryEntry(String entryId) async {
+    await _diary.doc(entryId).delete();
+  }
+
+  Stream<List<Map<String, dynamic>>> diaryStream() {
+    return _diary
+        .orderBy('createdAt', descending: true)
         .snapshots()
         .map(
           (snap) => snap.docs
