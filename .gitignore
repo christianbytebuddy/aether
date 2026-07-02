@@ -68,3 +68,8 @@ lib/core/firebase_options.dart
 .env
 *.env
 secrets.dart
+
+google-services.json
+firebase.json
+lib/core/firebase_options.dart
+lib/services/aethra_service.dart

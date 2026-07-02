@@ -1,23 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:app_links/app_links.dart';
 import 'core/firebase_options.dart';
 import 'features/auth/login_page.dart';
 import 'features/home/home_page.dart';
-import 'features/aethra/aethra_page.dart';
 import 'features/community/community_page.dart';
 import 'package:aether/features/echo/echo_page.dart';
 import 'profile_page.dart';
 import 'package:aether/services/spotify_auth_service.dart';
 import 'package:aether/features/pulse/pulse_page.dart';
 import 'package:aether/core/user_session.dart';
+import 'package:aether/features/aethra/aethra_history_page.dart';
+import 'package:aether/features/splash/splash_screen.dart';
+import 'package:aether/features/onboarding/onboarding_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Escucha deep links para el callback de Spotify
   final appLinks = AppLinks();
   appLinks.uriLinkStream.listen((uri) {
     debugPrint('DEEP LINK: $uri');
@@ -38,24 +40,20 @@ class MyApp extends StatelessWidget {
       title: 'Aether',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
-      home: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              backgroundColor: Color(0xFF0B0F1A),
-              body: Center(
-                child: CircularProgressIndicator(
-                  color: Color(0xFF7B6EF6),
-                  strokeWidth: 2,
-                ),
-              ),
-            );
-          }
-          if (snapshot.hasData) return const _AppWithNav();
-          return const LoginPage();
-        },
-      ),
+      home: const SplashScreen(),
+      routes: {
+        '/login': (context) => const LoginPage(),
+        '/home': (context) => const _AppWithNav(),
+        '/onboarding': (context) => OnboardingPage(
+          onComplete: () async {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool('onboarding_complete', true);
+            if (context.mounted) {
+              Navigator.pushReplacementNamed(context, '/home');
+            }
+          },
+        ),
+      },
     );
   }
 }
@@ -78,7 +76,7 @@ class _AppWithNavState extends State<_AppWithNav> {
 
   final List<Widget> _pages = [
     const HomePage(),
-    const AethraPage(),
+    const AethraHistoryPage(),
     const CommunityPage(),
     const PulsePage(),
     const EchoPage(),
@@ -182,22 +180,4 @@ class _NavItem {
     required this.activeIcon,
     required this.label,
   });
-}
-
-class _Placeholder extends StatelessWidget {
-  final String label;
-  const _Placeholder({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0B0F1A),
-      body: Center(
-        child: Text(
-          label,
-          style: const TextStyle(color: Color(0xFF3D4466), fontSize: 18),
-        ),
-      ),
-    );
-  }
 }

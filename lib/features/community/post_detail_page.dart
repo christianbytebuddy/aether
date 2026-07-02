@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -48,13 +49,13 @@ class _PostDetailPageState extends State<PostDetailPage> {
 
   Future<void> _toggleLike(String postId, bool isLiked) async {
     if (_isTogglingLike) return;
-    _isTogglingLike = true;
+    setState(() => _isTogglingLike = true);
     try {
       await widget.firestoreService.togglePostLike(postId, isLiked);
     } catch (e) {
       debugPrint('ERROR en toggleLike: $e');
     } finally {
-      _isTogglingLike = false;
+      if (mounted) setState(() => _isTogglingLike = false);
     }
   }
 
@@ -75,6 +76,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
     String postId,
     String currentTitle,
     String currentDescription,
+    List<dynamic> currentAlbums,
     String postOwnerUid,
   ) {
     showModalBottomSheet(
@@ -106,172 +108,54 @@ class _PostDetailPageState extends State<PostDetailPage> {
                 ),
                 onTap: () {
                   Navigator.pop(context);
-                  _showEditSheet(
-                    context,
-                    postId,
-                    currentTitle,
-                    currentDescription,
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (_) => _EditPostSheet(
+                      firestoreService: widget.firestoreService,
+                      postId: postId,
+                      initialTitle: currentTitle,
+                      initialDescription: currentDescription,
+                      initialAlbums: currentAlbums
+                          .map(
+                            (a) => AlbumModel(
+                              id:
+                                  (a as Map<String, dynamic>)['id']
+                                      as String? ??
+                                  '',
+                              name: a['name'] as String? ?? '',
+                              artist: a['artist'] as String? ?? '',
+                              imageUrl: a['imageUrl'] as String? ?? '',
+                              year: 0,
+                              totalTracks: 0,
+                              durationMs: 0,
+                              genres: [],
+                              tracks: [],
+                            ),
+                          )
+                          .toList(),
+                    ),
                   );
                 },
               ),
-            ListTile(
-              leading: const Icon(
-                Icons.delete_outline,
-                color: Colors.redAccent,
+            if (_uid == postOwnerUid || _isAdmin)
+              ListTile(
+                leading: const Icon(
+                  Icons.delete_outline,
+                  color: Colors.redAccent,
+                ),
+                title: const Text(
+                  'Eliminar publicación',
+                  style: TextStyle(color: Colors.redAccent),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _confirmDelete(context, postId);
+                },
               ),
-              title: const Text(
-                'Eliminar publicación',
-                style: TextStyle(color: Colors.redAccent),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _confirmDelete(context, postId);
-              },
-            ),
             const SizedBox(height: 8),
           ],
-        ),
-      ),
-    );
-  }
-
-  void _showEditSheet(
-    BuildContext context,
-    String postId,
-    String currentTitle,
-    String currentDescription,
-  ) {
-    final titleCtrl = TextEditingController(text: currentTitle);
-    final descCtrl = TextEditingController(text: currentDescription);
-    bool isSaving = false;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF111827),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModal) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Editar publicación',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: titleCtrl,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                  decoration: InputDecoration(
-                    hintText: 'Título',
-                    hintStyle: const TextStyle(color: Colors.white38),
-                    filled: true,
-                    fillColor: const Color(0xFF1C1F2E),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: descCtrl,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    hintText: 'Descripción',
-                    hintStyle: const TextStyle(color: Colors.white38),
-                    filled: true,
-                    fillColor: const Color(0xFF1C1F2E),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: GestureDetector(
-                    onTap: isSaving
-                        ? null
-                        : () async {
-                            if (titleCtrl.text.trim().isEmpty) return;
-                            setModal(() => isSaving = true);
-                            try {
-                              await widget.firestoreService.updatePost(
-                                postId: postId,
-                                title: titleCtrl.text.trim(),
-                                description: descCtrl.text.trim(),
-                              );
-                              if (mounted) Navigator.pop(ctx);
-                            } finally {
-                              if (mounted) setModal(() => isSaving = false);
-                            }
-                          },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(
-                        color: _accent,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Center(
-                        child: isSaving
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text(
-                                'Guardar cambios',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
         ),
       ),
     );
@@ -399,7 +283,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
           body: SafeArea(
             child: Column(
               children: [
-                // ── Header ───────────────────────────────────────────────
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                   child: Row(
@@ -428,6 +311,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                             postId,
                             title,
                             description,
+                            rawAlbums,
                             postOwnerUid,
                           ),
                           child: Container(
@@ -467,8 +351,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
                     ],
                   ),
                 ),
-
-                // ── Contenido scrollable ──────────────────────────────────
                 Expanded(
                   child: ListView(
                     controller: _scrollController,
@@ -495,8 +377,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
                         ),
                       ],
                       const SizedBox(height: 16),
-
-                      // ── Me gusta ──────────────────────────────────────
                       InkWell(
                         onTap: _isTogglingLike
                             ? null
@@ -533,8 +413,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
                         ),
                       ),
                       const SizedBox(height: 20),
-
-                      // ── Álbumes ──────────────────────────────────────────
                       ...rawAlbums.map((raw) {
                         final albumData = raw as Map<String, dynamic>;
                         final album = AlbumModel(
@@ -548,7 +426,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
                           genres: [],
                           tracks: [],
                         );
-
                         return GestureDetector(
                           onTap: () async {
                             showDialog(
@@ -598,10 +475,11 @@ class _PostDetailPageState extends State<PostDetailPage> {
                                         width: 64,
                                         height: 64,
                                         fit: BoxFit.cover,
-                                        placeholder: (_, _) => const ColoredBox(
-                                          color: Color(0xFF1C1F2E),
-                                        ),
-                                        errorWidget: (_, _, _) =>
+                                        placeholder: (_, __) =>
+                                            const ColoredBox(
+                                              color: Color(0xFF1C1F2E),
+                                            ),
+                                        errorWidget: (_, __, ___) =>
                                             const ColoredBox(
                                               color: Color(0xFF1C1F2E),
                                             ),
@@ -659,10 +537,7 @@ class _PostDetailPageState extends State<PostDetailPage> {
                           ),
                         );
                       }),
-
                       const SizedBox(height: 8),
-
-                      // ── Comentarios ──────────────────────────────────────
                       StreamBuilder<List<Map<String, dynamic>>>(
                         stream: widget.firestoreService.commentsStream(postId),
                         builder: (context, snapshot) {
@@ -700,8 +575,6 @@ class _PostDetailPageState extends State<PostDetailPage> {
                     ],
                   ),
                 ),
-
-                // ── Input comentario ──────────────────────────────────────
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -849,6 +722,394 @@ class _PostDetailPageState extends State<PostDetailPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Sheet de edición completa ─────────────────────────────────────────────────
+
+class _EditPostSheet extends StatefulWidget {
+  final FirestoreService firestoreService;
+  final String postId;
+  final String initialTitle;
+  final String initialDescription;
+  final List<AlbumModel> initialAlbums;
+
+  const _EditPostSheet({
+    required this.firestoreService,
+    required this.postId,
+    required this.initialTitle,
+    required this.initialDescription,
+    required this.initialAlbums,
+  });
+
+  @override
+  State<_EditPostSheet> createState() => _EditPostSheetState();
+}
+
+class _EditPostSheetState extends State<_EditPostSheet> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _descriptionController;
+  final TextEditingController _searchController = TextEditingController();
+  final _spotify = SpotifyService();
+  Timer? _debounce;
+
+  late List<AlbumModel> _selectedAlbums;
+  List<AlbumModel> _searchResults = [];
+  bool _isSearching = false;
+  bool _isSaving = false;
+
+  static const _accent = Color(0xFF7B6EF6);
+  static const _card = Color(0xFF1C1F2E);
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.initialTitle);
+    _descriptionController = TextEditingController(
+      text: widget.initialDescription,
+    );
+    _selectedAlbums = List<AlbumModel>.from(widget.initialAlbums);
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    _searchController.dispose();
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _search(String query) async {
+    _debounce?.cancel();
+    if (query.trim().isEmpty) {
+      if (mounted) setState(() => _searchResults = []);
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 400), () async {
+      if (!mounted) return;
+      setState(() => _isSearching = true);
+      try {
+        final results = await _spotify.searchAlbums(query.trim());
+        if (mounted) {
+          setState(() {
+            _searchResults = results;
+            _isSearching = false;
+          });
+        }
+      } catch (e) {
+        if (mounted) setState(() => _isSearching = false);
+      }
+    });
+  }
+
+  Future<void> _save() async {
+    if (_titleController.text.trim().isEmpty) return;
+    if (_selectedAlbums.isEmpty) return;
+    setState(() => _isSaving = true);
+    try {
+      await widget.firestoreService.updatePost(
+        postId: widget.postId,
+        title: _titleController.text.trim(),
+        description: _descriptionController.text.trim(),
+        albums: _selectedAlbums,
+      );
+      if (mounted) Navigator.pop(context);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.92,
+        decoration: const BoxDecoration(
+          color: Color(0xFF111827),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Editar publicación',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: _isSaving ? null : _save,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _accent,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: _isSaving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Text(
+                              'Guardar',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Divider(color: Colors.white12),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                children: [
+                  TextField(
+                    controller: _titleController,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: 'Título de tu playlist...',
+                      hintStyle: const TextStyle(color: Colors.white38),
+                      filled: true,
+                      fillColor: _card,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _descriptionController,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    maxLines: 2,
+                    decoration: InputDecoration(
+                      hintText: 'Describe tu playlist...',
+                      hintStyle: const TextStyle(color: Colors.white38),
+                      filled: true,
+                      fillColor: _card,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (_selectedAlbums.isNotEmpty) ...[
+                    const Text(
+                      'Álbumes',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 90,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        physics: const ClampingScrollPhysics(),
+                        itemCount: _selectedAlbums.length,
+                        itemBuilder: (_, i) {
+                          final album = _selectedAlbums[i];
+                          return Stack(
+                            children: [
+                              Container(
+                                width: 90,
+                                margin: const EdgeInsets.only(right: 8),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: CachedNetworkImage(
+                                    imageUrl: album.imageUrl,
+                                    fit: BoxFit.cover,
+                                    placeholder: (_, __) => const ColoredBox(
+                                      color: Color(0xFF1C1F2E),
+                                    ),
+                                    errorWidget: (_, __, ___) =>
+                                        const ColoredBox(
+                                          color: Color(0xFF1C1F2E),
+                                        ),
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                top: 4,
+                                right: 12,
+                                child: GestureDetector(
+                                  onTap: () => setState(
+                                    () => _selectedAlbums.removeAt(i),
+                                  ),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(2),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.black54,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.close,
+                                      color: Colors.white,
+                                      size: 14,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  TextField(
+                    controller: _searchController,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    keyboardType: TextInputType.text,
+                    textInputAction: TextInputAction.search,
+                    onSubmitted: _search,
+                    onChanged: _search,
+                    decoration: InputDecoration(
+                      hintText: 'Buscar álbumes para agregar...',
+                      hintStyle: const TextStyle(color: Colors.white38),
+                      filled: true,
+                      fillColor: _card,
+                      prefixIcon: const Icon(
+                        Icons.search,
+                        color: Colors.white38,
+                        size: 20,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_isSearching)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.only(top: 20),
+                        child: CircularProgressIndicator(
+                          color: _accent,
+                          strokeWidth: 2,
+                        ),
+                      ),
+                    )
+                  else if (_searchResults.isEmpty &&
+                      _searchController.text.isNotEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 16),
+                      child: Text(
+                        'Sin resultados',
+                        style: TextStyle(color: Colors.white24, fontSize: 13),
+                      ),
+                    )
+                  else
+                    ..._searchResults.map((album) {
+                      final isSelected = _selectedAlbums.any(
+                        (a) => a.id == album.id,
+                      );
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: CachedNetworkImage(
+                            imageUrl: album.imageUrl,
+                            width: 48,
+                            height: 48,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) =>
+                                const ColoredBox(color: Color(0xFF1C1F2E)),
+                          ),
+                        ),
+                        title: Text(
+                          album.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          album.artist,
+                          style: const TextStyle(
+                            color: Colors.white38,
+                            fontSize: 11,
+                          ),
+                        ),
+                        trailing: GestureDetector(
+                          onTap: () {
+                            if (isSelected) {
+                              setState(
+                                () => _selectedAlbums.removeWhere(
+                                  (a) => a.id == album.id,
+                                ),
+                              );
+                            } else {
+                              setState(() => _selectedAlbums.add(album));
+                            }
+                          },
+                          child: Icon(
+                            isSelected
+                                ? Icons.check_circle
+                                : Icons.add_circle_outline,
+                            color: isSelected ? _accent : Colors.white38,
+                            size: 24,
+                          ),
+                        ),
+                      );
+                    }),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

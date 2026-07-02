@@ -8,8 +8,14 @@ import 'package:aether/features/echo/echo_result_page.dart';
 class EchoGamePage extends StatefulWidget {
   final Map<String, dynamic> artist;
   final SpotifyService spotify;
+  final int secondsPerRound;
 
-  const EchoGamePage({super.key, required this.artist, required this.spotify});
+  const EchoGamePage({
+    super.key,
+    required this.artist,
+    required this.spotify,
+    required this.secondsPerRound,
+  });
 
   @override
   State<EchoGamePage> createState() => _EchoGamePageState();
@@ -20,6 +26,8 @@ class _EchoGamePageState extends State<EchoGamePage> {
   static const _accent = Color(0xFF7B6EF6);
   static const _bg = Color(0xFF0B0F1A);
   static const _card = Color(0xFF111827);
+
+  int get _roundDuration => widget.secondsPerRound;
 
   final _player = AudioPlayer();
   List<Map<String, dynamic>> _tracks = [];
@@ -39,6 +47,7 @@ class _EchoGamePageState extends State<EchoGamePage> {
   @override
   void initState() {
     super.initState();
+    _player.setPlayerMode(PlayerMode.mediaPlayer);
     _loadTracks();
   }
 
@@ -55,6 +64,7 @@ class _EchoGamePageState extends State<EchoGamePage> {
         widget.artist['name'] as String,
         deezerArtistId: widget.artist['deezerArtistId'] as String?,
       );
+
       if (tracks.length < 4) {
         if (mounted) {
           showDialog(
@@ -85,12 +95,13 @@ class _EchoGamePageState extends State<EchoGamePage> {
         return;
       }
       tracks.shuffle();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _tracks = tracks;
           _isLoading = false;
         });
-      _startRound();
+        _startRound();
+      }
     } catch (e) {
       if (mounted) Navigator.pop(context);
     }
@@ -106,6 +117,7 @@ class _EchoGamePageState extends State<EchoGamePage> {
     await _player.stop();
 
     final track = _tracks[_round];
+
     final wrongTracks = _tracks.where((t) => t['id'] != track['id']).toList()
       ..shuffle();
     final wrong = wrongTracks.take(3).map((t) => t['name'] as String).toList();
@@ -114,28 +126,28 @@ class _EchoGamePageState extends State<EchoGamePage> {
     if (mounted) setState(() => _isLoadingRound = true);
 
     try {
-      // URL fresca por cada ronda
-      final freshUrl = await widget.spotify.getDeezerTrackPreview(
-        track['deezerTrackId'] as String,
-      );
+      final previewUrl = track['previewUrl'] as String? ?? '';
 
-      if (freshUrl.isEmpty) {
+      if (previewUrl.isEmpty) {
         if (mounted) setState(() => _round++);
         _startRound();
         return;
       }
 
-      track['previewUrl'] = freshUrl;
-
-      // Imagen en paralelo
       precacheImage(
         NetworkImage(track['imageUrl'] as String? ?? ''),
         context,
       ).catchError((_) {});
 
-      // Cargar audio y esperar que esté listo
-      await _player.setSourceUrl(freshUrl);
-      await Future.delayed(const Duration(milliseconds: 1200));
+      await _player.play(UrlSource(previewUrl));
+
+      // Espera hasta 3s a que confirme que está reproduciendo
+      int waitMs = 0;
+      while (waitMs < 3000) {
+        if (_player.state == PlayerState.playing) break;
+        await Future.delayed(const Duration(milliseconds: 100));
+        waitMs += 100;
+      }
     } catch (_) {}
 
     if (!mounted) return;
@@ -145,14 +157,8 @@ class _EchoGamePageState extends State<EchoGamePage> {
       _options = options;
       _selectedOption = null;
       _answered = false;
-      _secondsLeft = 5;
+      _secondsLeft = _roundDuration;
       _isLoadingRound = false;
-    });
-
-    await _player.resume();
-
-    Future.delayed(const Duration(seconds: 5), () {
-      if (mounted && !_answered) _player.stop();
     });
 
     _startTimer();
@@ -243,7 +249,7 @@ class _EchoGamePageState extends State<EchoGamePage> {
       body: SafeArea(
         child: Column(
           children: [
-            // ── Top bar ──────────────────────────────────────────────────
+            // ── Top bar ───────────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
               child: Row(
@@ -268,7 +274,7 @@ class _EchoGamePageState extends State<EchoGamePage> {
               ),
             ),
 
-            // ── Progress bar ─────────────────────────────────────────────
+            // ── Progress bar ──────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
               child: ClipRRect(
@@ -302,7 +308,7 @@ class _EchoGamePageState extends State<EchoGamePage> {
                       fit: BoxFit.cover,
                       placeholder: (_, __) =>
                           const ColoredBox(color: Color(0xFF1C1F2E)),
-                      errorWidget: (_, _, _) =>
+                      errorWidget: (_, __, ___) =>
                           const ColoredBox(color: Color(0xFF1C1F2E)),
                     ),
                   ),
@@ -381,9 +387,7 @@ class _EchoGamePageState extends State<EchoGamePage> {
                         onTap: () => _selectOption(option),
                       );
                     }),
-
                     const Spacer(),
-
                     if (_answered)
                       GestureDetector(
                         onTap: _nextRound,

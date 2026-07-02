@@ -232,8 +232,11 @@ class EchoResultPage extends StatelessWidget {
                         Navigator.pushAndRemoveUntil(
                           context,
                           MaterialPageRoute(
-                            builder: (_) =>
-                                EchoGamePage(artist: artist, spotify: spotify),
+                            builder: (_) => EchoGamePage(
+                              artist: artist,
+                              spotify: spotify,
+                              secondsPerRound: 30,
+                            ),
                           ),
                           (route) => route.isFirst,
                         );
