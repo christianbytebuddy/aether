@@ -3,8 +3,8 @@ import 'package:http/http.dart' as http;
 import 'package:aether/models/album_model.dart';
 
 class SpotifyService {
-  static const _clientId = 'b86fec074d134665a6691ee45672b57d';
-  static const _clientSecret = '06dde81f08fd43b79591f4250b9c236a';
+  static const _clientId = String.fromEnvironment('SPOTIFY_CLIENT_ID');
+  static const _clientSecret = String.fromEnvironment('SPOTIFY_CLIENT_SECRET');
   static const _authUrl = 'https://accounts.spotify.com/api/token';
   static const _apiUrl = 'https://api.spotify.com/v1';
 

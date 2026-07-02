@@ -8,8 +8,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 class SpotifyAuthService {
-  static const _clientId = 'b86fec074d134665a6691ee45672b57d';
-  static const _clientSecret = '06dde81f08fd43b79591f4250b9c236a';
+  static const _clientId = String.fromEnvironment('SPOTIFY_CLIENT_ID');
+  static const _clientSecret = String.fromEnvironment('SPOTIFY_CLIENT_SECRET');
   static const _redirectUri = 'aether://spotify-callback';
   static const _scopes =
       'user-top-read user-read-private user-read-recently-played';
