@@ -42,6 +42,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData.dark(),
       home: const SplashScreen(),
       routes: {
+        '/splash': (context) => const SplashScreen(),
         '/login': (context) => const LoginPage(),
         '/home': (context) => const _AppWithNav(),
         '/onboarding': (context) => OnboardingPage(

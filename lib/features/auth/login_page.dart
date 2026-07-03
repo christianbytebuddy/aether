@@ -53,7 +53,9 @@ class _LoginPageState extends State<LoginPage> {
         _emailController.text.trim(),
         _passwordController.text,
       );
-      // La navegación post-login la maneja AuthService o un StreamBuilder en main.
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/splash', (route) => false);
+      }
     } on FirebaseAuthException catch (e) {
       _showError(_firebaseMessage(e.code));
     } catch (_) {
@@ -69,6 +71,9 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       await _authService.signInWithGoogle();
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/splash', (route) => false);
+      }
     } on FirebaseAuthException catch (e) {
       _showError(_firebaseMessage(e.code));
     } catch (_) {

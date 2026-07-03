@@ -171,7 +171,7 @@ class _AethraPageState extends State<AethraPage>
     _scrollToBottom();
 
     try {
-      final result = await _aethra.sendMessageWithResults(query, uid: _uid);
+      final result = await _aethra.sendMessageWithResults(query);
       final responseText = result['message'] as String;
       final albums = result['albums'] as List<AlbumModel>;
 

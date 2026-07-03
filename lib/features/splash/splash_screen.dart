@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,56 +12,77 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
-  late final AnimationController _drawController;
-  late final Animation<double> _drawProgress;
+  // Fase continua del campo de energía (loop perfectamente cerrado)
+  late final AnimationController _fieldController;
 
-  late final AnimationController _glowController;
-  late final Animation<double> _glowPulse;
+  // Respiración sutil del núcleo central vacío
+  late final AnimationController _breathController;
+  late final Animation<double> _breath;
 
+  // Entrada: fade + scale
+  late final AnimationController _entryController;
+  late final Animation<double> _entryScale;
+  late final Animation<double> _entryOpacity;
+
+  // Salida: fade completo de la pantalla
   late final AnimationController _fadeOutController;
   late final Animation<double> _fadeOut;
 
   bool _navigationDone = false;
 
+  static const _bg = Color(0xFF0B0F1A);
+
   @override
   void initState() {
     super.initState();
 
-    _drawController = AnimationController(
+    _fieldController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    );
-    _drawProgress = CurvedAnimation(
-      parent: _drawController,
-      curve: Curves.easeInOutCubic,
+      duration: const Duration(milliseconds: 3200),
+    )..repeat();
+
+    _breathController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2800),
+    )..repeat(reverse: true);
+    _breath = CurvedAnimation(
+      parent: _breathController,
+      curve: Curves.easeInOutSine,
     );
 
-    _glowController = AnimationController(
+    _entryController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2200),
+      duration: const Duration(milliseconds: 900),
     );
-    _glowPulse = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
+    _entryScale = Tween<double>(begin: 0.9, end: 1.0).animate(
+      CurvedAnimation(parent: _entryController, curve: Curves.easeOutCubic),
+    );
+    _entryOpacity = CurvedAnimation(
+      parent: _entryController,
+      curve: const Interval(0.0, 0.8, curve: Curves.easeOut),
     );
 
     _fadeOutController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 450),
     );
     _fadeOut = CurvedAnimation(
       parent: _fadeOutController,
-      curve: Curves.easeOut,
+      curve: Curves.easeIn,
     );
 
     _startSequence();
   }
 
   Future<void> _startSequence() async {
-    await Future.delayed(const Duration(milliseconds: 250));
-    await _drawController.forward();
-    _glowController.repeat(reverse: true);
-    await Future.delayed(const Duration(milliseconds: 1000));
+    await Future.delayed(const Duration(milliseconds: 150));
+    await _entryController.forward();
+
     final destination = await _resolveDestination();
+
+    // Deja respirar la animación un momento antes de salir
+    await Future.delayed(const Duration(milliseconds: 750));
+
     await _fadeOutController.forward();
     if (mounted && !_navigationDone) {
       _navigationDone = true;
@@ -80,8 +101,9 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
-    _drawController.dispose();
-    _glowController.dispose();
+    _fieldController.dispose();
+    _breathController.dispose();
+    _entryController.dispose();
     _fadeOutController.dispose();
     super.dispose();
   }
@@ -89,18 +111,27 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0F1A),
+      backgroundColor: _bg,
       body: AnimatedBuilder(
-        animation: Listenable.merge([_drawProgress, _glowPulse, _fadeOut]),
+        animation: Listenable.merge([
+          _fieldController,
+          _breath,
+          _entryScale,
+          _entryOpacity,
+          _fadeOut,
+        ]),
         builder: (context, _) {
           return Opacity(
             opacity: 1.0 - _fadeOut.value,
             child: Center(
-              child: CustomPaint(
-                size: const Size(220, 240),
-                painter: _AetherLogoPainter(
-                  drawProgress: _drawProgress.value,
-                  glowPulse: _glowPulse.value,
+              child: Opacity(
+                opacity: _entryOpacity.value,
+                child: Transform.scale(
+                  scale: _entryScale.value,
+                  child: _AetherLoader(
+                    phase: _fieldController.value,
+                    breath: _breath.value,
+                  ),
                 ),
               ),
             ),
@@ -111,208 +142,172 @@ class _SplashScreenState extends State<SplashScreen>
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Painter
-// ─────────────────────────────────────────────────────────────────────────────
-class _AetherLogoPainter extends CustomPainter {
-  final double drawProgress;
-  final double glowPulse;
+// ─────────────────────────────────────────────────────────────────────────
+// Campo de energía circular: líneas radiales finas distribuidas en los
+// 360° completos, cada una animada de forma independiente (longitud,
+// opacidad y micro-desfase propios). Una onda continua viaja alrededor
+// del círculo dando sensación de órbita/energía viva, sin rotar el
+// conjunto como un bloque. Centro completamente vacío.
+// ─────────────────────────────────────────────────────────────────────────
+class _AetherLoader extends StatelessWidget {
+  final double phase; // 0..1, loop continuo y perfectamente cerrado
+  final double breath; // 0..1, va y vuelve
 
-  const _AetherLogoPainter({
-    required this.drawProgress,
-    required this.glowPulse,
-  });
+  const _AetherLoader({required this.phase, required this.breath});
 
-  static const int _layers = 7;
-
-  // Colores: exterior más oscuro/azul, interior más claro/violeta
-  static const Color _outer = Color(0xFF4A3FC4);
-  static const Color _inner = Color(0xFF9D93F8);
+  static const _accent = Color(0xFF8B5CF6);
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final base = _buildBaseA(size.width, size.height);
-    final paths = _buildLayers(base, size.width, size.height);
-
-    // ── Glow difuso ──────────────────────────────────────────────────────────
-    final glowOpacity = 0.28 + glowPulse * 0.10;
-    final glowPaint = Paint()
-      ..color = const Color(0xFF7B6EF6).withOpacity(glowOpacity)
-      ..strokeWidth = 20
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
-    for (final p in paths) {
-      _drawPartial(canvas, glowPaint, p, drawProgress);
-    }
-
-    // ── Líneas ───────────────────────────────────────────────────────────────
-    for (int i = 0; i < paths.length; i++) {
-      final t = i / (_layers - 1); // 0=outer, 1=inner
-      final color = Color.lerp(_outer, _inner, t)!;
-      final sw = 2.5 - t * 1.0; // 2.5px → 1.5px
-
-      final paint = Paint()
-        ..color = color
-        ..strokeWidth = sw
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..style = PaintingStyle.stroke;
-
-      _drawPartial(canvas, paint, paths[i], drawProgress);
-    }
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 140,
+      height: 140,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          RepaintBoundary(
+            child: CustomPaint(
+              size: const Size(140, 140),
+              painter: _EnergyFieldPainter(phase: phase),
+            ),
+          ),
+          // Núcleo: espacio limpio, solo un punto de luz mínimo que respira
+          Container(
+            width: 5 + breath * 2,
+            height: 5 + breath * 2,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _accent,
+              boxShadow: [
+                BoxShadow(
+                  color: _accent.withValues(alpha: 0.5 + breath * 0.25),
+                  blurRadius: 12 + breath * 6,
+                  spreadRadius: 0.5 + breath,
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            bottom: -34,
+            child: Opacity(
+              opacity: 0.75,
+              child: Text(
+                'AETHER',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 5,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
+}
 
-  // Dibuja solo [progress] fracción del path
-  void _drawPartial(Canvas canvas, Paint paint, Path path, double progress) {
-    if (progress <= 0) return;
-    if (progress >= 1) {
-      canvas.drawPath(path, paint);
-      return;
-    }
-    for (final m in path.computeMetrics()) {
-      final len = m.length * progress;
-      if (len > 0) canvas.drawPath(m.extractPath(0, len), paint);
-    }
-  }
+class _EnergyFieldPainter extends CustomPainter {
+  final double phase; // 0..1
 
-  // ── Genera N capas escalando el path base desde su centro ──────────────────
-  // Cada capa es la misma forma exacta, solo un poco más pequeña.
-  // Esto garantiza líneas perfectamente paralelas.
-  List<Path> _buildLayers(Path base, double w, double h) {
-    final cx = w / 2;
-    final cy = h / 2;
-    const totalShrink = 0.28; // la capa más interior es 28% más pequeña
+  _EnergyFieldPainter({required this.phase});
 
-    return List.generate(_layers, (i) {
-      // i=0 → outer (escala 1.0), i=_layers-1 → inner (escala 1-totalShrink)
-      final scale = 1.0 - (i / (_layers - 1)) * totalShrink;
+  static const _accent = Color(0xFF8B5CF6);
+  static const int _lineCount = 28;
 
-      // Matriz: escala centrada en (cx, cy)
-      // [scale, 0,     cx*(1-scale)]
-      // [0,     scale, cy*(1-scale)]
-      final matrix = Float64List(16);
-      matrix[0] = scale;
-      matrix[5] = scale;
-      matrix[10] = 1;
-      matrix[15] = 1;
-      matrix[12] = cx * (1 - scale);
-      matrix[13] = cy * (1 - scale);
+  // Cuántas veces "da la vuelta" la onda de energía por cada ciclo del
+  // controller. Debe ser un entero para que el loop sea perfectamente
+  // cerrado (sin salto perceptible al reiniciar).
+  static const double _waveRevolutions = 2.0;
+  static const double _secondaryWaveRevolutions = 3.0;
 
-      return base.transform(matrix);
+  // Jitter determinista por línea (misma semilla siempre): pequeñas
+  // variaciones de fase, longitud y opacidad para que el conjunto se
+  // sienta orgánico en vez de perfectamente uniforme.
+  static final List<_LineJitter> _jitter = _buildJitter();
+
+  static List<_LineJitter> _buildJitter() {
+    final rnd = math.Random(7);
+    return List.generate(_lineCount, (_) {
+      return _LineJitter(
+        phaseOffset: rnd.nextDouble() * 0.5 - 0.25,
+        lengthMul: 0.75 + rnd.nextDouble() * 0.5,
+        opacityMul: 0.7 + rnd.nextDouble() * 0.5,
+      );
     });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // BASE A — una sola forma, tamaño completo del canvas
-  //
-  // Referencia del logo original:
-  //   - Apex con arco suave y compacto en la cima
-  //   - Patas que se abren ampliamente (triángulo ancho)
-  //   - Pata izquierda: al llegar abajo hace una cola que gira a la derecha
-  //   - Pata derecha: más recta, termina en diagonal hacia abajo-izquierda
-  //   - Barra horizontal curva al ~58% de la altura
-  //
-  // El path se dibuja como UN SOLO trazo continuo para que la animación
-  // de draw-on se vea fluida y sin saltos:
-  //   hombro-izq → apex-arco → hombro-der → pata-der → cola-der
-  //   (moveTo) barra izq → barra der
-  //   (moveTo) hombro-izq → pata-izq → cola-izq
-  // ─────────────────────────────────────────────────────────────────────────
-  Path _buildBaseA(double w, double h) {
-    final path = Path();
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final maxRadius = size.width / 2;
 
-    // ── Puntos principales ────────────────────────────────────────────────────
+    // Radio interno generoso: el centro queda completamente despejado,
+    // rodeado por energía, no ocupado por ella.
+    final innerRadius = maxRadius * 0.46;
+    const baseLength = 0.14;
+    const lengthAmplitude = 0.11;
 
-    // Hombros del apex (donde el arco redondeado termina y empiezan las patas)
-    // El arco es PEQUEÑO — solo ocupa el 30% central del ancho
-    const double shoulderLX = 0.36; // hombro izquierdo X
-    const double shoulderLY = 0.20; // hombro izquierdo Y
-    const double shoulderRX = 0.64; // hombro derecho X
-    const double shoulderRY = 0.20; // hombro derecho Y
+    for (var i = 0; i < _lineCount; i++) {
+      final j = _jitter[i];
+      final theta = (i / _lineCount) * 2 * math.pi;
 
-    // Control points del arco del apex
-    const double apexCtrlY = 0.03; // altura del apex
+      // Onda viajera: combina dos armónicos con distinta velocidad y
+      // número de "lóbulos" para un movimiento con más carácter que un
+      // simple seno único, sin dejar de ser fluido y continuo.
+      final wave1 = math.sin(
+        theta * 3 + phase * _waveRevolutions * 2 * math.pi + j.phaseOffset,
+      );
+      final wave2 = math.sin(
+        theta * 5 -
+            phase * _secondaryWaveRevolutions * 2 * math.pi +
+            j.phaseOffset * 1.7,
+      );
+      final combined = (wave1 * 0.7 + wave2 * 0.3);
+      final energy = (combined + 1) / 2; // 0..1
 
-    // Pata izquierda: se abre hacia la izquierda, base bien abierta
-    const double legLX = 0.05; // base pata izquierda X
-    const double legLY = 0.87; // base pata izquierda Y
-    // Cola izquierda: la curva que gira a la derecha
-    const double tailLX = 0.18; // fin de la cola izquierda
-    const double tailLY = 0.96; // fin de la cola izquierda
+      final lengthFactor =
+          (baseLength + lengthAmplitude * energy) * j.lengthMul;
+      final length = maxRadius * lengthFactor;
 
-    // Pata derecha: se abre hacia la derecha
-    const double legRX = 0.88; // base pata derecha X
-    const double legRY = 0.87; // base pata derecha Y
-    // Fin pata derecha (diagonal hacia abajo-izquierda)
-    const double tipRX = 0.78; // punta inferior derecha X
-    const double tipRY = 0.96; // punta inferior derecha Y
+      final opacity = (0.25 + 0.65 * energy).clamp(0.0, 1.0) * j.opacityMul;
+      final strokeWidth = 1.3 + energy * 1.1;
 
-    // Barra horizontal
-    const double barLX = 0.28;
-    const double barLY = 0.60;
-    const double barRX = 0.72;
-    const double barRY = 0.60;
-    const double barMidY = 0.56; // arco suave hacia arriba
+      final dir = Offset(math.cos(theta), math.sin(theta));
+      final start = center + dir * innerRadius;
+      final end = center + dir * (innerRadius + length);
 
-    // ── Segmento 1: arco del apex (izq → der) ────────────────────────────────
-    path.moveTo(w * shoulderLX, h * shoulderLY);
-    path.cubicTo(
-      w * 0.42,
-      h * apexCtrlY, // ctrl 1
-      w * 0.58,
-      h * apexCtrlY, // ctrl 2
-      w * shoulderRX,
-      h * shoulderRY,
-    );
+      // Glow sutil detrás de cada línea
+      final glowPaint = Paint()
+        ..color = _accent.withValues(alpha: opacity * 0.35)
+        ..strokeWidth = strokeWidth + 2.4
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+      canvas.drawLine(start, end, glowPaint);
 
-    // ── Segmento 2: pata derecha ──────────────────────────────────────────────
-    path.cubicTo(
-      w * 0.72,
-      h * 0.42, // ctrl 1: empieza a abrirse
-      w * 0.85,
-      h * 0.68, // ctrl 2: muy abierta
-      w * legRX,
-      h * legRY,
-    );
-    // Remate inferior derecho (diagonal)
-    path.cubicTo(w * 0.90, h * 0.91, w * 0.86, h * 0.94, w * tipRX, h * tipRY);
-
-    // ── Segmento 3: barra (sub-path) ─────────────────────────────────────────
-    path.moveTo(w * barLX, h * barLY);
-    path.cubicTo(
-      w * 0.40,
-      h * barMidY,
-      w * 0.60,
-      h * barMidY,
-      w * barRX,
-      h * barRY,
-    );
-
-    // ── Segmento 4: pata izquierda + cola ────────────────────────────────────
-    path.moveTo(w * shoulderLX, h * shoulderLY);
-    path.cubicTo(
-      w * 0.28,
-      h * 0.42, // ctrl 1: empieza a abrirse
-      w * 0.12,
-      h * 0.68, // ctrl 2: muy abierta a la izquierda
-      w * legLX,
-      h * legLY,
-    );
-    // Cola: llega al extremo izquierdo y gira hacia la derecha
-    path.cubicTo(
-      w * 0.02,
-      h * 0.91, // ctrl 1: toca el extremo
-      w * 0.03,
-      h * 0.96, // ctrl 2: gira
-      w * tailLX,
-      h * tailLY, // termina más a la derecha
-    );
-
-    return path;
+      // Trazo nítido
+      final sharpPaint = Paint()
+        ..color = _accent.withValues(alpha: opacity.clamp(0.0, 1.0))
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(start, end, sharpPaint);
+    }
   }
 
   @override
-  bool shouldRepaint(_AetherLogoPainter old) =>
-      old.drawProgress != drawProgress || old.glowPulse != glowPulse;
+  bool shouldRepaint(covariant _EnergyFieldPainter oldDelegate) =>
+      oldDelegate.phase != phase;
+}
+
+class _LineJitter {
+  final double phaseOffset;
+  final double lengthMul;
+  final double opacityMul;
+
+  const _LineJitter({
+    required this.phaseOffset,
+    required this.lengthMul,
+    required this.opacityMul,
+  });
 }

@@ -222,6 +222,13 @@
   .mock-notch{position:absolute; top:14px; left:50%; transform:translateX(-50%); width:76px; height:18px; background:#05070d; border-radius:10px; z-index:5;}
   .mock-body{position:absolute; inset:0; padding:36px 14px 70px;}
 
+  /* Capturas reales dentro del marco de teléfono */
+  .mock-phone--shot{background:#000;}
+  .shot-img{
+    position:absolute; inset:0; width:100%; height:100%;
+    object-fit:cover; object-position:top center;
+  }
+
   /* mini mockup variants */
   .mock-home{background:linear-gradient(200deg,#3a2e8f,#17102f 55%,#0B0F1A);}
   .mock-home .cover{width:100%; aspect-ratio:.82; border-radius:16px; background:linear-gradient(140deg,#7B6EF6,#2a2166); margin-bottom:14px; box-shadow:0 10px 26px rgba(123,110,246,.35);}
@@ -400,14 +407,9 @@
         <p>Cada portada de álbum genera su propio degradado de fondo en tiempo real. No hay dos scrolls que se vean igual — el feed se adapta a lo que estás mirando, con caché local para que cargue rápido incluso con conexión lenta.</p>
       </div>
       <div class="showcase-visual">
-        <div class="mock-phone">
+        <div class="mock-phone mock-phone--shot">
           <div class="mock-notch"></div>
-          <div class="mock-body mock-home">
-            <div class="cover"></div>
-            <div class="pillrow"><span class="pill">Indie</span><span class="pill">2024</span></div>
-            <div class="phone-line w60"></div>
-            <div class="phone-line w40"></div>
-          </div>
+          <img src="screenshots/home.jpg" alt="Pantalla Home de Aether mostrando el detalle de un álbum" class="shot-img">
         </div>
       </div>
     </div>
@@ -441,19 +443,9 @@
         <p>Publica un álbum con un comentario, reacciona a lo que comparten otros y sigue descubriendo a través de las publicaciones de la comunidad.</p>
       </div>
       <div class="showcase-visual">
-        <div class="mock-phone">
+        <div class="mock-phone mock-phone--shot">
           <div class="mock-notch"></div>
-          <div class="mock-body mock-community">
-            <div class="post">
-              <div class="post-head"><div class="avatar"></div><div class="phone-line w40" style="margin:0;"></div></div>
-              <div class="post-cover"></div>
-              <div class="post-actions"><span>♡ 24</span><span>💬 6</span></div>
-            </div>
-            <div class="post">
-              <div class="post-head"><div class="avatar"></div><div class="phone-line w40" style="margin:0;"></div></div>
-              <div class="post-cover"></div>
-            </div>
-          </div>
+          <img src="screenshots/comunidad.jpg" alt="Pantalla Comunidad de Aether con playlists de usuarios" class="shot-img">
         </div>
       </div>
     </div>
@@ -465,19 +457,9 @@
         <p>Conecta Spotify Premium y mira de frente tus hábitos de escucha: qué artistas dominan tu mes, tus canciones más repetidas y cuándo escuchas más.</p>
       </div>
       <div class="showcase-visual">
-        <div class="mock-phone">
+        <div class="mock-phone mock-phone--shot">
           <div class="mock-notch"></div>
-          <div class="mock-body mock-pulse">
-            <div class="stat-chip">Artista top <b>Arctic Monkeys</b></div>
-            <div class="stat-chip">Día más activo <b>Viernes</b></div>
-            <div class="bars">
-              <div class="bar" style="height:40%;"></div>
-              <div class="bar" style="height:70%;"></div>
-              <div class="bar" style="height:55%;"></div>
-              <div class="bar" style="height:90%;"></div>
-              <div class="bar" style="height:35%;"></div>
-            </div>
-          </div>
+          <img src="screenshots/pulse.jpg" alt="Pantalla Pulse de Aether con estadísticas de escucha" class="shot-img">
         </div>
       </div>
     </div>
@@ -489,19 +471,9 @@
         <p>Un preview de audio, un temporizador y cinco rondas por partida. Tres niveles de dificultad para poner a prueba qué tanto conoces tu música.</p>
       </div>
       <div class="showcase-visual">
-        <div class="mock-phone">
+        <div class="mock-phone mock-phone--shot">
           <div class="mock-notch"></div>
-          <div class="mock-body mock-echo">
-            <div class="timer-ring"></div>
-            <div class="waveform">
-              <div class="wave-bar" style="height:40%; animation-delay:0s;"></div>
-              <div class="wave-bar" style="height:80%; animation-delay:.1s;"></div>
-              <div class="wave-bar" style="height:50%; animation-delay:.2s;"></div>
-              <div class="wave-bar" style="height:90%; animation-delay:.3s;"></div>
-              <div class="wave-bar" style="height:35%; animation-delay:.4s;"></div>
-              <div class="wave-bar" style="height:65%; animation-delay:.5s;"></div>
-            </div>
-          </div>
+          <img src="screenshots/echo.jpg" alt="Pantalla Echo de Aether, juego de adivinar canciones" class="shot-img">
         </div>
       </div>
     </div>
@@ -513,17 +485,9 @@
         <p>Organiza tus álbumes en carpetas, califícalos con estrellas y escribe en tu diario musical semanal — disponible para todos, incluso sin Spotify conectado.</p>
       </div>
       <div class="showcase-visual">
-        <div class="mock-phone">
+        <div class="mock-phone mock-phone--shot">
           <div class="mock-notch"></div>
-          <div class="mock-body mock-perfil">
-            <div class="phone-line w60"></div>
-            <div class="phone-line w40"></div>
-            <div class="grid9">
-              <div></div><div></div><div></div>
-              <div></div><div></div><div></div>
-              <div></div><div></div><div></div>
-            </div>
-          </div>
+          <img src="screenshots/perfil.jpg" alt="Pantalla Perfil de Aether con álbumes favoritos" class="shot-img">
         </div>
       </div>
     </div>

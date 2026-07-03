@@ -393,7 +393,14 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  Future<void> _signOut() async => await _auth.signOut();
+  Future<void> _signOut() async {
+    await _auth.signOut();
+    if (mounted) {
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil('/splash', (route) => false);
+    }
+  }
 
   String _topSong() {
     if (_topTracks.isEmpty) return '-';
